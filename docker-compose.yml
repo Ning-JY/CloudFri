@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: cloudfri-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: cloudfri
+      MYSQL_USER: cloudfri
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - cloudfri-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: src/CloudFri.Api/Dockerfile
+    container_name: cloudfri-api
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "server=mysql;port=3306;database=cloudfri;user=cloudfri;password=${MYSQL_PASSWORD};TreatTinyAsBoolean=true;AllowPublicKeyRetrieval=true"
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: CloudFri
+      Jwt__Audience: CloudFri
+      Seed__AdminUser: admin
+      Seed__AdminPassword: ${ADMIN_PASSWORD}
+      Storage__Root: /app/storage
+      TZ: Asia/Shanghai
+    volumes:
+      - cloudfri-storage:/app/storage
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    container_name: cloudfri-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8084:80"
+
+volumes:
+  cloudfri-mysql:
+  cloudfri-storage:
