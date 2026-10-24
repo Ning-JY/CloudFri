@@ -83,7 +83,7 @@ public class ProjectsController : ControllerBase
 
         var gcfxFileIds = files.Where(f => f.Category == "Software").Select(f => f.Id).ToList();
         var parses = await _db.GcfxParses.Where(g => gcfxFileIds.Contains(g.ProjectFileId))
-            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.Basis, g.Region, g.UnitsJson, g.Note, g.ParsedAt })
+            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.Note, g.ParsedAt })
             .ToListAsync();
 
         return Ok(new
