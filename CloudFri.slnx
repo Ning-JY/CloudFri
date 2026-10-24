@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CloudFri.Api/CloudFri.Api.csproj" />
+  </Folder>
+</Solution>

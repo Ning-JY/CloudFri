@@ -1,0 +1,7 @@
+bin/
+obj/
+*.user
+storage/
+web/node_modules/
+web/dist/
+.env
