@@ -12,10 +12,10 @@ services:
     volumes:
       - cloudfri-mysql:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysql -h127.0.0.1 -ucloudfri -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
-      retries: 30
+      retries: 40
 
   api:
     build:

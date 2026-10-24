@@ -50,8 +50,21 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.Now 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-    await SeedData.RunAsync(db, builder.Configuration);
+    // 数据库可能尚未完全就绪（MySQL 首次初始化有窗口期），带间隔重试，避免 EF 内部 Exists 紧密重试空转
+    for (var attempt = 1; ; attempt++)
+    {
+        try
+        {
+            db.Database.Migrate();
+            await SeedData.RunAsync(db, builder.Configuration);
+            break;
+        }
+        catch (Exception ex) when (attempt < 15)
+        {
+            Console.WriteLine($"[startup] 数据库未就绪（第 {attempt} 次）：{ex.Message}，5 秒后重试");
+            Thread.Sleep(5000);
+        }
+    }
 }
 
 app.Run();
