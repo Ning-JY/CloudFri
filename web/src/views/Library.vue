@@ -9,6 +9,7 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 const rows = ref([])
+const allRows = ref([])
 const cat = ref('')
 const q = ref('')
 const CATS = ['规章制度', '规范文件', '标准图集', '其他资料']
@@ -20,7 +21,12 @@ async function load() {
   const { data } = await api.get('/library', { params })
   rows.value = data
 }
-onMounted(load)
+async function loadCounts() {
+  const { data } = await api.get('/library')
+  allRows.value = data
+}
+function countOf(c) { return c ? allRows.value.filter(r => r.category === c).length : allRows.value.length }
+onMounted(async () => { await loadCounts(); load() })
 
 // 上传
 const showUpload = ref(false)
@@ -44,6 +50,7 @@ async function doUpload() {
     message.success('上传成功')
     showUpload.value = false
     upFile.value = null; upName.value = ''
+    await loadCounts()
     load()
   } catch (e) { message.error(errMsg(e, '上传失败')) }
 }
@@ -69,7 +76,7 @@ async function download(r) {
 }
 function del(r) {
   dialog.warning({ title: '删除资料', content: `确定删除「${r.name}」？`, positiveText: '删除', negativeText: '取消',
-    onPositiveClick: async () => { await api.delete('/library/' + r.id); message.success('已删除'); load() } })
+    onPositiveClick: async () => { await api.delete('/library/' + r.id); message.success('已删除'); await loadCounts(); load() } })
 }
 
 const columns = [
@@ -88,20 +95,27 @@ const columns = [
 </script>
 
 <template>
-  <div>
+  <div style="display:flex;gap:14px;align-items:flex-start">
+    <!-- 左：分类 -->
+    <div class="card lib-rail" style="padding:14px 10px">
+      <div class="nav-t" style="padding-top:2px">资料分类</div>
+      <button class="lib-cat" :class="{ on: cat === '' }" @click="cat = ''; load()">全部资料<span class="cnt">{{ countOf('') }}</span></button>
+      <button class="lib-cat" v-for="c in CATS" :key="c" :class="{ on: cat === c }" @click="cat = c; load()">{{ c }}<span class="cnt">{{ countOf(c) }}</span></button>
+    </div>
+    <!-- 右：列表 -->
+    <div style="flex:1;min-width:0">
     <div class="card" style="padding:14px 18px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;gap:6px">
-          <n-button v-for="c in ['', ...CATS]" :key="c" size="small" :type="cat === c ? 'primary' : 'default'" :ghost="cat !== c" @click="cat = c; load()">{{ c || '全部' }}</n-button>
-        </div>
+        <b style="font-size:14.5px">{{ cat || '全部资料' }}</b>
         <div style="flex:1"></div>
         <n-input v-model:value="q" placeholder="搜索资料名称" style="width:220px" clearable @update:value="load" />
-        <n-button type="primary" @click="showUpload = true">上传资料</n-button>
+        <n-button type="primary" @click="upCat = cat || '规章制度'; showUpload = true">上传资料</n-button>
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
       <n-data-table :columns="columns" :data="rows" :bordered="false" />
-      <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无资料，点右上角上传第一份</div>
+      <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">该分类暂无资料，点右上角上传</div>
+    </div>
     </div>
 
     <n-modal v-model:show="showUpload" preset="card" title="上传资料" style="width:480px;border-radius:16px">

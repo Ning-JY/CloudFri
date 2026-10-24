@@ -3,7 +3,8 @@ import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt } from '../utils'
+import { fmt, fmtSize, fileKind } from '../utils'
+import PreviewModal from '../components/PreviewModal.vue'
 
 const router = useRouter()
 const message = useMessage()
@@ -13,6 +14,7 @@ const projects = ref([])
 const q = ref('')
 const type = ref('')
 const TYPES = ['框架合同', '单项合同', '补充协议']
+const previewRef = ref(null)
 
 async function load() {
   const params = {}
@@ -64,6 +66,48 @@ async function doLink() {
   } catch (e) { message.error(errMsg(e)) }
 }
 
+// 合同文件（扫描件 / 电子版）
+const showFiles = ref(false)
+const filesContract = ref(null)
+const files = ref([])
+async function openFiles(r) {
+  filesContract.value = r
+  showFiles.value = true
+  await loadFiles()
+}
+async function loadFiles() {
+  const { data } = await api.get(`/contracts/${filesContract.value.id}/files`)
+  files.value = data
+}
+function pickFile(cb) {
+  const inp = document.createElement('input')
+  inp.type = 'file'
+  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]) }
+  inp.click()
+}
+async function uploadContractFile(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    await api.post(`/contracts/${filesContract.value.id}/files`, fd)
+    message.success('合同文件已上传')
+    await loadFiles()
+    load()
+  } catch (e) { message.error(errMsg(e, '上传失败')) }
+}
+async function downloadContractFile(f) {
+  const { data } = await api.get(`/contracts/${filesContract.value.id}/files/${f.id}/download`, { responseType: 'blob' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(data)
+  a.download = f.fileName
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 800)
+}
+function delContractFile(f) {
+  dialog.warning({ title: '删除文件', content: `确定删除「${f.fileName}」？`, positiveText: '删除', negativeText: '取消',
+    onPositiveClick: async () => { await api.delete(`/contracts/${filesContract.value.id}/files/${f.id}`); message.success('已删除'); await loadFiles(); load() } })
+}
+
 const columns = [
   { title: '合同编号', key: 'no', width: 130, render: (r) => h('span', { class: 'num faint' }, r.no) },
   { title: '合同名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.partyA || '')]) },
@@ -71,6 +115,7 @@ const columns = [
   { title: '合同金额（万元）', key: 'amount', width: 130, align: 'right', render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
   { title: '签订日期', key: 'signDate', width: 110, render: (r) => r.signDate || '—' },
   { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
+  { title: '合同文件', key: 'files', width: 92, render: (r) => h(NButton, { size: 'small', quaternary: true, onClick: () => openFiles(r) }, () => r.fileCount ? `文件 ${r.fileCount}` : '传文件') },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
   { title: '操作', key: 'act', width: 190, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
     h(NButton, { size: 'small', onClick: () => openLink(r) }, () => '关联项目'),
@@ -96,28 +141,53 @@ const columns = [
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无合同</div>
     </div>
 
-    <n-modal v-model:show="showForm" preset="card" :title="cf.id ? '编辑合同' : '新建合同'" style="width:560px;border-radius:16px">
-      <n-form label-placement="top">
-        <n-grid :cols="2" :x-gap="12">
-          <n-form-item-gi label="合同编号 *"><n-input v-model:value="cf.no" placeholder="如 HT-2026-001" /></n-form-item-gi>
-          <n-form-item-gi label="合同类型"><n-select v-model:value="cf.type" :options="TYPES.map(t=>({label:t,value:t}))" /></n-form-item-gi>
-        </n-grid>
-        <n-form-item label="合同名称 *"><n-input v-model:value="cf.name" /></n-form-item>
-        <n-grid :cols="2" :x-gap="12">
-          <n-form-item-gi label="甲方（委托方）"><n-input v-model:value="cf.partyA" /></n-form-item-gi>
-          <n-form-item-gi label="签订日期"><n-date-picker v-model:formatted-value="cf.signDate" value-format="yyyy-MM-dd" type="date" clearable style="width:100%" /></n-form-item-gi>
-          <n-form-item-gi label="合同金额（万元）"><n-input-number v-model:value="cf.amount" :min="0" clearable style="width:100%" placeholder="框架合同可留空" /></n-form-item-gi>
-          <n-form-item-gi label="金额备注"><n-input v-model:value="cf.amountNote" placeholder="如：按实结算" /></n-form-item-gi>
-          <n-form-item-gi label="状态"><n-select v-model:value="cf.status" :options="['履行中','已完成','已终止'].map(t=>({label:t,value:t}))" /></n-form-item-gi>
-        </n-grid>
-      </n-form>
-      <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:10px">
-          <n-button @click="showForm = false">取消</n-button>
-          <n-button type="primary" @click="save">保存</n-button>
+    <!-- 新建 / 编辑合同：抽屉 -->
+    <n-drawer v-model:show="showForm" :width="560" placement="right">
+      <n-drawer-content :title="cf.id ? '编辑合同' : '新建合同'" closable>
+        <n-form label-placement="top">
+          <n-grid :cols="2" :x-gap="12">
+            <n-form-item-gi label="合同编号 *"><n-input v-model:value="cf.no" placeholder="如 HT-2026-001" /></n-form-item-gi>
+            <n-form-item-gi label="合同类型"><n-select v-model:value="cf.type" :options="TYPES.map(t=>({label:t,value:t}))" /></n-form-item-gi>
+          </n-grid>
+          <n-form-item label="合同名称 *"><n-input v-model:value="cf.name" /></n-form-item>
+          <n-grid :cols="2" :x-gap="12">
+            <n-form-item-gi label="甲方（委托方）"><n-input v-model:value="cf.partyA" /></n-form-item-gi>
+            <n-form-item-gi label="签订日期"><n-date-picker v-model:formatted-value="cf.signDate" value-format="yyyy-MM-dd" type="date" clearable style="width:100%" /></n-form-item-gi>
+            <n-form-item-gi label="合同金额（万元）"><n-input-number v-model:value="cf.amount" :min="0" clearable style="width:100%" placeholder="框架合同可留空" /></n-form-item-gi>
+            <n-form-item-gi label="金额备注"><n-input v-model:value="cf.amountNote" placeholder="如：按实结算" /></n-form-item-gi>
+            <n-form-item-gi label="状态"><n-select v-model:value="cf.status" :options="['履行中','已完成','已终止'].map(t=>({label:t,value:t}))" /></n-form-item-gi>
+          </n-grid>
+        </n-form>
+        <p class="small faint">合同文件（扫描件/电子版）在列表「合同文件」列上传，支持 PDF、图片在线预览。</p>
+        <template #footer>
+          <div style="display:flex;justify-content:flex-end;gap:10px">
+            <n-button @click="showForm = false">取消</n-button>
+            <n-button type="primary" @click="save">保存</n-button>
+          </div>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+
+    <!-- 合同文件 -->
+    <n-drawer v-model:show="showFiles" :width="560" placement="right">
+      <n-drawer-content :title="'合同文件 · ' + (filesContract?.name || '')" closable>
+        <div style="display:flex;align-items:center;margin-bottom:12px">
+          <span class="small mut">{{ files.length }} 个文件（合同扫描件、电子版等）</span>
+          <div style="flex:1"></div>
+          <n-button type="primary" size="small" @click="pickFile(uploadContractFile)">+ 上传文件</n-button>
         </div>
-      </template>
-    </n-modal>
+        <div v-for="f in files" :key="f.id" style="display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-soft)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px">{{ f.fileName }}</div>
+            <div class="psub">{{ fmtSize(f.sizeBytes) }} · {{ String(f.uploadedAt).slice(0, 10) }} · {{ f.uploadedBy || '' }}</div>
+          </div>
+          <n-button v-if="fileKind(f.fileName) !== 'other'" size="small" @click="previewRef.open(`/contracts/${filesContract.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
+          <n-button size="small" @click="downloadContractFile(f)">下载</n-button>
+          <n-button size="small" quaternary @click="delContractFile(f)">删除</n-button>
+        </div>
+        <div v-if="!files.length" class="faint" style="text-align:center;padding:26px">暂无文件，点右上角上传合同扫描件</div>
+      </n-drawer-content>
+    </n-drawer>
 
     <n-modal v-model:show="showLink" preset="card" title="关联到项目" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
@@ -133,5 +203,7 @@ const columns = [
         </div>
       </template>
     </n-modal>
+
+    <PreviewModal ref="previewRef" />
   </div>
 </template>

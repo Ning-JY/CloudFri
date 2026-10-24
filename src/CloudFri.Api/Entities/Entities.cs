@@ -138,11 +138,23 @@ public class GcfxParse
     public int ProjectFileId { get; set; }
     public string? ProjectName { get; set; }
     public decimal? TotalAmount { get; set; }
+    public string? AmountCn { get; set; }
     public string? Basis { get; set; }
     public string? Region { get; set; }
     public string? UnitsJson { get; set; }
     public string? Note { get; set; }
     public DateTime ParsedAt { get; set; } = DateTime.Now;
+}
+
+public class ContractFile
+{
+    public int Id { get; set; }
+    public int ContractId { get; set; }
+    public string FileName { get; set; } = "";
+    public string StoredPath { get; set; } = "";
+    public long SizeBytes { get; set; }
+    public string? UploadedBy { get; set; }
+    public DateTime UploadedAt { get; set; } = DateTime.Now;
 }
 
 /// <summary>流程模板定义。SchemaJson 存放 fields 与 opinions 配置（与前端原型一致）。</summary>

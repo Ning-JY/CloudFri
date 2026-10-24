@@ -68,6 +68,7 @@ public class FilesController : ControllerBase
                 parse = new GcfxParse
                 {
                     ProjectFileId = pf.Id, ProjectName = r.ProjectName, TotalAmount = r.TotalAmount,
+                    AmountCn = r.AmountCn,
                     Basis = r.Basis, Region = r.Region,
                     UnitsJson = JsonSerializer.Serialize(r.Units),
                     Note = "字符串级提取（工程树/大写金额/计价依据）；逐行结构化解析为二期项。"

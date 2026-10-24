@@ -49,6 +49,14 @@ export function statusType(status) {
   return { '编制中': 'warning', '审核中': 'info', '已出报告': 'success', '已归档': 'default' }[status] || 'default'
 }
 
+// 文件预览类型（按扩展名）：pdf / img / other
+export function fileKind(name) {
+  const ext = String(name || '').split('.').pop().toUpperCase()
+  if (ext === 'PDF') return 'pdf'
+  if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP'].includes(ext)) return 'img'
+  return 'other'
+}
+
 export function todayStr() {
   const d = new Date()
   const p = (x) => String(x).padStart(2, '0')

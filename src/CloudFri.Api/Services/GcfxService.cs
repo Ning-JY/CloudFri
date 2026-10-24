@@ -13,24 +13,25 @@ namespace CloudFri.Api.Services;
 /// </summary>
 public static class GcfxService
 {
-    public record GcfxResult(string? ProjectName, decimal? TotalAmount, string? Basis, string? Region, List<string> Units);
+    public record GcfxResult(string? ProjectName, decimal? TotalAmount, string? AmountCn, string? Basis, string? Region, List<string> Units);
 
     public static GcfxResult Parse(string filePath)
     {
         var counts = ExtractStringCounts(filePath);
         var strings = counts.Keys.ToList();
 
-        // 大写金额：文件中可能有多个（总造价 = 税前造价 + 税金等），总造价取最大值
-        var amounts = new List<decimal>();
+        // 大写金额：文件中可能有多个（总造价 = 税前造价 + 税金等），总造价取最大值，并保留其大写原文
+        var amounts = new List<(decimal V, string S)>();
         foreach (var s in strings)
         {
             foreach (Match m in Regex.Matches(s, @"[零壹贰叁肆伍陆柒捌玖拾佰仟万亿]{2,}元[零壹贰叁肆伍陆柒捌玖角分整]*"))
             {
                 var v = ChineseMoneyToDecimal(m.Value);
-                if (v != null && v.Value > 0) amounts.Add(v.Value);
+                if (v != null && v.Value > 0) amounts.Add((v.Value, m.Value));
             }
         }
-        var total = amounts.Count == 0 ? (decimal?)null : amounts.Max();
+        var total = amounts.Count == 0 ? (decimal?)null : amounts.Max(x => x.V);
+        var amountCn = amounts.Count == 0 ? null : amounts.MaxBy(x => x.V)!.S;
 
         // 计价依据：形态「××规范清单计价(××定额)××计税」中出现频次最高者（实际选用值会随报表反复出现）
         var basis = strings
@@ -65,7 +66,7 @@ public static class GcfxService
             .OrderByDescending(s => counts[s])
             .Take(20).ToList();
 
-        return new GcfxResult(projectName, total, basis, region, units);
+        return new GcfxResult(projectName, total, amountCn, basis, region, units);
     }
 
     private static Dictionary<string, int> ExtractStringCounts(string filePath)

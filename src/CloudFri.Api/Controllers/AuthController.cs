@@ -24,6 +24,10 @@ public class AuthController : ControllerBase
     public record LoginReq(string UserName, string Password);
     public record ChangePwdReq(string OldPassword, string NewPassword);
 
+    // JwtBearer 默认会把 JWT 的 sub 映射为 NameIdentifier，FindFirstValue("sub") 取不到会抛错（改密码 500 的根因）
+    private int CurrentUserId() =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginReq req)
     {
@@ -57,7 +61,7 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var id = int.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        var id = CurrentUserId();
         var user = await _db.Users.FindAsync(id);
         if (user == null) return Unauthorized();
         return Ok(new { user.Id, user.UserName, user.DisplayName, user.Role, user.MemberId });
@@ -67,7 +71,7 @@ public class AuthController : ControllerBase
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword(ChangePwdReq req)
     {
-        var id = int.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        var id = CurrentUserId();
         var user = await _db.Users.FindAsync(id);
         if (user == null) return Unauthorized();
         var ok = _hasher.VerifyHashedPassword(user, user.PasswordHash, req.OldPassword)

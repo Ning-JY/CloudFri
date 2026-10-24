@@ -12,7 +12,15 @@ namespace CloudFri.Api.Controllers;
 public class ContractsController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public ContractsController(AppDbContext db) => _db = db;
+    private readonly string _root;
+    public ContractsController(AppDbContext db, IConfiguration cfg)
+    {
+        _db = db;
+        _root = Path.GetFullPath(cfg["Storage:Root"] ?? "storage");
+    }
+
+    private string CurrentUserName() =>
+        User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "";
 
     public record ContractReq(string No, string Name, string Type, string? PartyA,
         decimal? Amount, string? AmountNote, DateOnly? SignDate, string? Status);
@@ -30,6 +38,7 @@ public class ContractsController : ControllerBase
             .Select(c => new
             {
                 c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status,
+                FileCount = _db.ContractFiles.Count(f => f.ContractId == c.Id),
                 ProjectCount = _db.ProjectContracts.Count(pc => pc.ContractId == c.Id),
                 Projects = _db.ProjectContracts.Where(pc => pc.ContractId == c.Id)
                     .Join(_db.Projects, pc => pc.ProjectId, p => p.Id, (pc, p) => p.Name).ToList()
@@ -68,10 +77,63 @@ public class ContractsController : ControllerBase
     {
         var c = await _db.Contracts.FindAsync(id);
         if (c == null) return NotFound();
+        var files = await _db.ContractFiles.Where(x => x.ContractId == id).ToListAsync();
+        foreach (var f in files) { try { System.IO.File.Delete(f.StoredPath); } catch { } }
+        _db.ContractFiles.RemoveRange(files);
         _db.ProjectContracts.RemoveRange(_db.ProjectContracts.Where(x => x.ContractId == id));
         _db.Contracts.Remove(c);
         await _db.SaveChangesAsync();
         return Ok(new { c.Id });
+    }
+
+    // ---------- 合同文件（扫描件/电子版）：上传、预览/下载、删除 ----------
+
+    [HttpGet("{id:int}/files")]
+    public async Task<IActionResult> Files(int id)
+    {
+        var rows = await _db.ContractFiles.Where(f => f.ContractId == id)
+            .OrderByDescending(f => f.UploadedAt)
+            .Select(f => new { f.Id, f.FileName, f.SizeBytes, f.UploadedBy, f.UploadedAt }).ToListAsync();
+        return Ok(rows);
+    }
+
+    [HttpPost("{id:int}/files")]
+    [RequestSizeLimit(300_000_000)]
+    public async Task<IActionResult> UploadFile(int id, IFormFile file)
+    {
+        if (!await _db.Contracts.AnyAsync(x => x.Id == id)) return NotFound();
+        if (file == null || file.Length == 0) return BadRequest(new { message = "文件为空" });
+        var dir = Path.Combine(_root, "contracts", id.ToString());
+        Directory.CreateDirectory(dir);
+        var stored = Path.Combine(dir, Guid.NewGuid().ToString("N") + Path.GetExtension(file.FileName));
+        using (var fs = System.IO.File.Create(stored)) await file.CopyToAsync(fs);
+        var cf = new ContractFile
+        {
+            ContractId = id, FileName = file.FileName, StoredPath = stored,
+            SizeBytes = file.Length, UploadedBy = CurrentUserName()
+        };
+        _db.ContractFiles.Add(cf);
+        await _db.SaveChangesAsync();
+        return Ok(new { cf.Id });
+    }
+
+    [HttpGet("{id:int}/files/{fileId:int}/download")]
+    public async Task<IActionResult> DownloadFile(int id, int fileId)
+    {
+        var f = await _db.ContractFiles.FirstOrDefaultAsync(x => x.Id == fileId && x.ContractId == id);
+        if (f == null || !System.IO.File.Exists(f.StoredPath)) return NotFound();
+        return PhysicalFile(f.StoredPath, "application/octet-stream", f.FileName);
+    }
+
+    [HttpDelete("{id:int}/files/{fileId:int}")]
+    public async Task<IActionResult> DeleteFile(int id, int fileId)
+    {
+        var f = await _db.ContractFiles.FirstOrDefaultAsync(x => x.Id == fileId && x.ContractId == id);
+        if (f == null) return NotFound();
+        try { System.IO.File.Delete(f.StoredPath); } catch { }
+        _db.ContractFiles.Remove(f);
+        await _db.SaveChangesAsync();
+        return Ok(new { f.Id });
     }
 
     [HttpPost("{id:int}/link")]

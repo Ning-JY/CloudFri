@@ -23,7 +23,7 @@ public class ProjectsController : ControllerBase
     public record TeamItem(int MemberId, string Role, decimal Share);
 
     [HttpGet]
-    public async Task<IActionResult> List(string? q = null, string? status = null, string? bizType = null, int? ownerId = null)
+    public async Task<IActionResult> List(string? q = null, string? status = null, string? bizType = null, int? ownerId = null, int? year = null)
     {
         var query = _db.Projects.AsQueryable();
         if (!string.IsNullOrWhiteSpace(q))
@@ -31,6 +31,7 @@ public class ProjectsController : ControllerBase
         if (!string.IsNullOrEmpty(status)) query = query.Where(x => x.Status == status);
         if (!string.IsNullOrEmpty(bizType)) query = query.Where(x => x.BizType == bizType);
         if (ownerId != null) query = query.Where(x => x.OwnerMemberId == ownerId);
+        if (year != null) query = query.Where(x => x.AcceptedDate.HasValue && x.AcceptedDate.Value.Year == year.Value);
 
         var rows = await query.OrderByDescending(x => x.AcceptedDate).ThenByDescending(x => x.Id)
             .Select(x => new

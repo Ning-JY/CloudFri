@@ -12,6 +12,14 @@ const members = ref([])
 const q = ref('')
 const status = ref('')
 const bizType = ref('')
+const ownerId = ref('')
+const CUR_YEAR = new Date().getFullYear()
+const year = ref(CUR_YEAR)
+const YEAR_OPTS = [
+  { label: CUR_YEAR + ' 年', value: CUR_YEAR },
+  { label: (CUR_YEAR - 1) + ' 年', value: CUR_YEAR - 1 },
+  { label: '全部年度', value: '' }
+]
 const loading = ref(false)
 
 const BIZ_TYPES = ['结算审核', '预算编制', '清单控制价', '竣工决算', '跟踪审计', '全过程咨询']
@@ -24,6 +32,8 @@ async function load() {
     if (q.value) params.q = q.value
     if (status.value) params.status = status.value
     if (bizType.value) params.bizType = bizType.value
+    if (ownerId.value) params.ownerId = ownerId.value
+    if (year.value !== '') params.year = year.value
     const { data } = await api.get('/projects', { params })
     rows.value = data
   } finally { loading.value = false }
@@ -81,12 +91,14 @@ onMounted(async () => {
     <div class="card" style="padding:14px 18px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <n-input v-model:value="q" placeholder="搜索项目名称 / 委托单位 / 编号" style="width:280px" clearable @update:value="load" />
+        <n-select v-model:value="year" :options="YEAR_OPTS" style="width:118px" @update:value="load" />
         <n-select v-model:value="bizType" :options="[{label:'全部业务类型',value:''},...BIZ_TYPES.map(t=>({label:t,value:t}))]" style="width:150px" @update:value="load" />
-        <div style="display:flex;gap:6px">
-          <n-button v-for="s in ['', ...STATUSES]" :key="s" size="small" :type="status === s ? 'primary' : 'default'" :ghost="status !== s" @click="status = s; load()">{{ s || '全部' }}</n-button>
-        </div>
+        <n-select v-model:value="ownerId" :options="[{label:'全部负责人',value:''},...members.map(m=>({label:m.name,value:m.id}))]" style="width:132px" @update:value="load" />
         <div style="flex:1"></div>
         <n-button type="primary" @click="showCreate = true">+ 新建登记</n-button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <n-button v-for="s in ['', ...STATUSES]" :key="s" size="small" :type="status === s ? 'primary' : 'default'" :ghost="status !== s" @click="status = s; load()">{{ s || '全部' }}</n-button>
       </div>
     </div>
 

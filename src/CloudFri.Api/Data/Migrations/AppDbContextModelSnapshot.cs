@@ -69,6 +69,39 @@ namespace CloudFri.Api.Data.Migrations
                     b.ToTable("Contracts");
                 });
 
+            modelBuilder.Entity("CloudFri.Api.Entities.ContractFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ContractId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("UploadedBy")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ContractFiles");
+                });
+
             modelBuilder.Entity("CloudFri.Api.Entities.DictItem", b =>
                 {
                     b.Property<int>("Id")
@@ -180,6 +213,9 @@ namespace CloudFri.Api.Data.Migrations
                         .HasColumnType("int");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AmountCn")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Basis")
                         .HasColumnType("longtext");
