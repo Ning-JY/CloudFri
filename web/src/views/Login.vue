@@ -1,0 +1,50 @@
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { NForm, NFormItem, NInput, NButton, useMessage } from 'naive-ui'
+import { useAuthStore } from '../stores/auth'
+import { errMsg } from '../api'
+
+const router = useRouter()
+const auth = useAuthStore()
+const message = useMessage()
+const form = ref({ userName: '', password: '' })
+const loading = ref(false)
+
+async function submit() {
+  if (!form.value.userName || !form.value.password) { message.warning('请输入用户名和密码'); return }
+  loading.value = true
+  try {
+    await auth.login(form.value.userName, form.value.password)
+    message.success('登录成功')
+    router.push('/')
+  } catch (e) {
+    message.error(errMsg(e, '登录失败'))
+  } finally { loading.value = false }
+}
+</script>
+
+<template>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div class="brand-logo" style="width:46px;height:46px;font-size:20px;border-radius:14px">C</div>
+        <div>
+          <div style="font-size:21px;font-weight:800;line-height:1.2">CloudFri</div>
+          <div class="faint small">造价咨询台账系统</div>
+        </div>
+      </div>
+      <p class="mut small" style="margin:10px 0 22px">请使用公司账号登录。首次使用请联系管理员开通账号。</p>
+      <NForm @submit.prevent="submit">
+        <NFormItem label="用户名">
+          <NInput v-model:value="form.userName" placeholder="请输入用户名" size="large" @keyup.enter="submit" />
+        </NFormItem>
+        <NFormItem label="密码">
+          <NInput v-model:value="form.password" type="password" show-password-on="click" placeholder="请输入密码" size="large" @keyup.enter="submit" />
+        </NFormItem>
+        <NButton type="primary" size="large" block :loading="loading" @click="submit" style="margin-top:6px">登 录</NButton>
+      </NForm>
+      <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">CloudFri · 宜宾规划设计咨询集团有限公司</p>
+    </div>
+  </div>
+</template>
