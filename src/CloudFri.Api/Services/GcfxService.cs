@@ -71,12 +71,16 @@ public static class GcfxService
         projectName ??= strings.Where(s => s.Contains("建设项目") && s.Length is >= 10 and <= 80 && !s.Contains("。"))
             .OrderByDescending(s => counts[s]).FirstOrDefault();
 
-        // 单位工程构成：以「工程」结尾、无标点的短串中频次 ≥4 者（大文件真实单位工程频次高；
-        // 小文件/单项导出频次低，门槛过高会整表提空——2026-10-25 SGCFX 实测教训）
-        var units = strings.Where(s => s.EndsWith("工程") && s.Length is >= 4 and <= 20
-                && !Regex.IsMatch(s, @"[，。：；、（）()\d]") && counts[s] >= 4 && s != projectName)
-            .OrderByDescending(s => counts[s])
-            .Take(20).ToList();
+        // 单位工程构成：以「工程」结尾、无标点的短串，按频次两档提取——
+        // 常规文件用 ≥8（真实单位工程在各报表反复出现；模板枚举多在 4–7 次，实测会混入城市轨道交通等定额类别）；
+        // 若 ≥8 一个都提不到（小文件/单项导出，如只含一个单位工程的 SGCFX，真实串频次只有 4），再放宽到 ≥4。
+        var unitPool = strings.Where(s => s.EndsWith("工程") && s.Length is >= 4 and <= 20
+                && !Regex.IsMatch(s, @"[，。：；、（）()\d]") && s != projectName).ToList();
+        var units = unitPool.Where(s => counts[s] >= 8)
+            .OrderByDescending(s => counts[s]).Take(20).ToList();
+        if (units.Count == 0)
+            units = unitPool.Where(s => counts[s] >= 4)
+                .OrderByDescending(s => counts[s]).Take(20).ToList();
 
         return new GcfxResult(projectName, total, amountCn, basis, region, units);
     }
