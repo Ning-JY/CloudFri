@@ -35,6 +35,40 @@ public class FilesController : ControllerBase
     private string CurrentUserName() =>
         User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "";
 
+    /// <summary>取项目当前成果版本集合；没有则建 V1，并把旧文件（SetId 为空，整体版本功能上线前上传的）归入最早的版本集合。</summary>
+    private async Task<DeliverableSet> EnsureCurrentSetAsync(int projectId)
+    {
+        var sets = await _db.DeliverableSets.Where(s => s.ProjectId == projectId).OrderBy(s => s.Version).ToListAsync();
+        if (sets.Count == 0)
+        {
+            var s1 = new DeliverableSet { ProjectId = projectId, Version = 1, CreatedBy = CurrentUserName() };
+            _db.DeliverableSets.Add(s1);
+            await _db.SaveChangesAsync();
+            sets.Add(s1);
+        }
+        var legacy = await _db.ProjectFiles.Where(f => f.ProjectId == projectId && f.SetId == null).ToListAsync();
+        if (legacy.Count > 0)
+        {
+            foreach (var f in legacy) f.SetId = sets[0].Id;
+            await _db.SaveChangesAsync();
+        }
+        return sets[^1];
+    }
+
+    /// <summary>新增成果版本：当前版本（软件版/文档版/报告）整体转入历史，开启新版本承接后续上传。</summary>
+    [HttpPost("new-version")]
+    public async Task<IActionResult> NewVersion(int projectId)
+    {
+        if (!await _db.Projects.AnyAsync(x => x.Id == projectId)) return NotFound();
+        var cur = await EnsureCurrentSetAsync(projectId);
+        var hasFiles = await _db.ProjectFiles.AnyAsync(f => f.ProjectId == projectId && f.SetId == cur.Id);
+        if (!hasFiles) return Ok(new { cur.Version, Created = false });
+        var next = new DeliverableSet { ProjectId = projectId, Version = cur.Version + 1, CreatedBy = CurrentUserName() };
+        _db.DeliverableSets.Add(next);
+        await _db.SaveChangesAsync();
+        return Ok(new { next.Version, Created = true });
+    }
+
     /// <summary>上传成果文件（软件版/文档版/报告）：同分类版本号自动 +1，旧版转历史。GCFX 自动触发字符串级解析。</summary>
     [HttpPost("deliverables")]
     [RequestSizeLimit(300_000_000)]
@@ -45,14 +79,15 @@ public class FilesController : ControllerBase
         if (category is not ("Software" or "Document" or "Report"))
             return BadRequest(new { message = "成果分类不正确" });
 
+        var set = await EnsureCurrentSetAsync(projectId);
         var stored = SaveUpload(projectId, "deliverables", file);
         var maxVer = await _db.ProjectFiles
-            .Where(f => f.ProjectId == projectId && f.Category == category)
+            .Where(f => f.ProjectId == projectId && f.Category == category && f.SetId == set.Id)
             .MaxAsync(f => (int?)f.Version) ?? 0;
         var pf = new ProjectFile
         {
             ProjectId = projectId, Category = category, FileName = file.FileName,
-            StoredPath = stored, SizeBytes = file.Length, Version = maxVer + 1,
+            StoredPath = stored, SizeBytes = file.Length, Version = maxVer + 1, SetId = set.Id,
             UploadedBy = CurrentUserName()
         };
         _db.ProjectFiles.Add(pf);

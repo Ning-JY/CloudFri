@@ -63,7 +63,10 @@ public class ProjectsController : ControllerBase
                                select new
                                {
                                    c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote,
-                                   c.SignDate, c.Status, pc.IsPrimary
+                                   c.SignDate, c.Status, pc.IsPrimary,
+                                   Files = _db.ContractFiles.Where(f => f.ContractId == c.Id)
+                                       .OrderByDescending(f => f.UploadedAt)
+                                       .Select(f => new { f.Id, f.FileName, f.SizeBytes, f.UploadedAt }).ToList()
                                }).ToListAsync();
 
         var receipts = await _db.Receipts.Where(r => r.ProjectId == id)
@@ -72,7 +75,11 @@ public class ProjectsController : ControllerBase
 
         var files = await _db.ProjectFiles.Where(f => f.ProjectId == id)
             .OrderBy(f => f.Category).ThenByDescending(f => f.Version)
-            .Select(f => new { f.Id, f.Category, f.FileName, f.SizeBytes, f.Version, f.UploadedBy, f.UploadedAt }).ToListAsync();
+            .Select(f => new { f.Id, f.Category, f.FileName, f.SizeBytes, f.Version, f.SetId, f.UploadedBy, f.UploadedAt }).ToListAsync();
+
+        var sets = await _db.DeliverableSets.Where(s => s.ProjectId == id)
+            .OrderBy(s => s.Version)
+            .Select(s => new { s.Id, s.Version, s.CreatedAt }).ToListAsync();
 
         var docs = await _db.ProjectDocs.Where(d => d.ProjectId == id)
             .OrderBy(d => d.Category).ThenByDescending(d => d.UploadedAt)
@@ -99,6 +106,7 @@ public class ProjectsController : ControllerBase
             Receipts = receipts,
             ReceivedTotal = receipts.Sum(r => r.Amount),
             Files = files,
+            DeliverableSets = sets,
             Docs = docs,
             GcfxParses = parses
         });
@@ -146,6 +154,7 @@ public class ProjectsController : ControllerBase
         _db.ProjectContracts.RemoveRange(_db.ProjectContracts.Where(x => x.ProjectId == id));
         _db.Receipts.RemoveRange(_db.Receipts.Where(x => x.ProjectId == id));
         _db.ProjectFiles.RemoveRange(_db.ProjectFiles.Where(x => x.ProjectId == id));
+        _db.DeliverableSets.RemoveRange(_db.DeliverableSets.Where(x => x.ProjectId == id));
         _db.ProjectDocs.RemoveRange(_db.ProjectDocs.Where(x => x.ProjectId == id));
         _db.Projects.Remove(p);
         await _db.SaveChangesAsync();

@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Receipt> Receipts => Set<Receipt>();
     public DbSet<ContractFile> ContractFiles => Set<ContractFile>();
     public DbSet<ProjectFile> ProjectFiles => Set<ProjectFile>();
+    public DbSet<DeliverableSet> DeliverableSets => Set<DeliverableSet>();
     public DbSet<ProjectDoc> ProjectDocs => Set<ProjectDoc>();
     public DbSet<GcfxParse> GcfxParses => Set<GcfxParse>();
     public DbSet<FormTemplate> FormTemplates => Set<FormTemplate>();

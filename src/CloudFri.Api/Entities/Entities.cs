@@ -104,7 +104,8 @@ public class Receipt
 }
 
 /// <summary>
-/// 成果文件（软件版/文档版/报告）。同一项目同一分类下 Version 最大的为当前版本，其余为历史版本。
+/// 成果文件（软件版/文档版/报告）。三类成果同属一个整体版本（DeliverableSet）：
+/// 点「新增版本」时当前版本的三类文件一起转历史。Version 为同一版本集合同一分类内的序号；SetId 为空的是整体版本功能上线前的旧文件，按 V1 处理。
 /// </summary>
 public class ProjectFile
 {
@@ -115,8 +116,19 @@ public class ProjectFile
     public string StoredPath { get; set; } = "";
     public long SizeBytes { get; set; }
     public int Version { get; set; } = 1;
+    public int? SetId { get; set; }
     public string? UploadedBy { get; set; }
     public DateTime UploadedAt { get; set; } = DateTime.Now;
+}
+
+/// <summary>成果整体版本：一次交付 = 一个版本（软件版+文档版+报告）。</summary>
+public class DeliverableSet
+{
+    public int Id { get; set; }
+    public int ProjectId { get; set; }
+    public int Version { get; set; } = 1;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public string? CreatedBy { get; set; }
 }
 
 /// <summary>项目过程资料（设计图纸/隐蔽工程资料/工作联系函/会议纪要/其他资料），只增不改版。</summary>

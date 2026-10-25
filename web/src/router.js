@@ -9,7 +9,6 @@ const routes = [
       { path: '', name: 'home', component: () => import('./views/Dashboard.vue'), meta: { title: '工作台' } },
       { path: 'projects', name: 'projects', component: () => import('./views/Projects.vue'), meta: { title: '项目台账' } },
       { path: 'projects/:id', name: 'project-detail', component: () => import('./views/ProjectDetail.vue'), meta: { title: '项目详情' } },
-      { path: 'projects/:id/gcfx/:fileId', name: 'gcfx', component: () => import('./views/GcfxView.vue'), meta: { title: '造价解析' } },
       { path: 'contracts', name: 'contracts', component: () => import('./views/Contracts.vue'), meta: { title: '合同台账' } },
       { path: 'fees', name: 'fees', component: () => import('./views/Fees.vue'), meta: { title: '收费台账' } },
       { path: 'forms', name: 'forms', component: () => import('./views/Forms.vue'), meta: { title: '流程模板' } },

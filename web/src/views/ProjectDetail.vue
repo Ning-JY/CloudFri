@@ -1,14 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
 import { NButton } from 'naive-ui'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, avatarFor, cutRate, fileKind } from '../utils'
+import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
+import GcfxPanel from '../components/GcfxPanel.vue'
 
 const route = useRoute()
-const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const id = Number(route.params.id)
@@ -80,15 +80,47 @@ const amounts = computed(() => {
   ]
 })
 
+// 成果文件整体版本：三类文件同属一个版本集合；SetId 为空的旧文件按最早集合（V1）处理
+const sets = computed(() => d.value?.deliverableSets || [])
+const currentSet = computed(() => sets.value.length ? sets.value[sets.value.length - 1] : null)
+const currentVersionNo = computed(() => currentSet.value?.version ?? 1)
+const effSetId = (f) => f.setId ?? (sets.value[0]?.id ?? 0)
+const currentSetKey = computed(() => currentSet.value?.id ?? (sets.value[0]?.id ?? 0))
+const curFiles = computed(() => (d.value?.files || []).filter(f => effSetId(f) === currentSetKey.value))
 const fileGroups = computed(() => {
   if (!d.value) return []
   return FILE_CATS.map(c => {
-    const fs = d.value.files.filter(f => f.category === c.key)
-    return { ...c, cur: fs[0] || null, hist: fs.slice(1) }
+    const fs = curFiles.value.filter(f => f.category === c.key)
+    return { ...c, cur: fs[0] || null, extra: fs.slice(1) }
   })
 })
 const gotCount = computed(() => fileGroups.value.filter(g => g.cur).length)
+const catLabel = (key) => FILE_CATS.find(c => c.key === key)?.label || key
+const historyGroups = computed(() => {
+  if (!d.value) return []
+  const groups = []
+  const replaced = fileGroups.value.flatMap(g => g.extra.map(f => ({ ...f, catLabel: g.label })))
+  if (replaced.length) groups.push({ key: 'rep', label: `当前版本 V${currentVersionNo.value} · 已替换的旧文件`, files: replaced })
+  const older = [...sets.value].slice(0, -1).reverse()
+  for (const s of older) {
+    const fs = (d.value.files || []).filter(f => effSetId(f) === s.id).map(f => ({ ...f, catLabel: catLabel(f.category) }))
+    if (fs.length) groups.push({ key: 'set' + s.id, label: `历史版本 V${s.version}`, files: fs })
+  }
+  return groups
+})
 const parseOf = (fileId) => (d.value?.gcfxParses || []).find(g => g.projectFileId === fileId)
+// 造价解析卡片展示对象：优先当前版本软件版文件的解析，否则取最近一次解析
+const gcfxTarget = computed(() => {
+  if (!d.value) return null
+  const sw = fileGroups.value.find(g => g.key === 'Software')?.cur
+  if (sw) { const pr = parseOf(sw.id); if (pr) return { parse: pr, fileName: sw.fileName } }
+  const all = [...(d.value.gcfxParses || [])].sort((a, b) => String(b.parsedAt).localeCompare(String(a.parsedAt)))
+  if (all.length) {
+    const f = d.value.files.find(x => x.id === all[0].projectFileId)
+    return { parse: all[0], fileName: f?.fileName || '' }
+  }
+  return null
+})
 const docGroups = computed(() => {
   if (!d.value) return []
   return DOC_CATS.map(cat => ({ cat, files: d.value.docs.filter(x => x.category === cat) }))
@@ -117,7 +149,7 @@ async function uploadDeliverable(cat, file) {
   try {
     const { data } = await api.post(`/projects/${id}/files/deliverables`, fd)
     if (data.filledField) message.success(`上传成功，已自动解析 GCFX，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万`)
-    else message.success(data.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，新版本已生效，旧版转历史')
+    else message.success(data.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，已存入当前版本')
     await load()
   } catch (e) { message.error(errMsg(e, '上传失败')) }
 }
@@ -130,6 +162,32 @@ async function uploadDoc(cat, file) {
     message.success('已归档到「' + cat + '」')
     await load()
   } catch (e) { message.error(errMsg(e, '上传失败')) }
+}
+// 新增成果版本：当前三类成果整体转历史，开启新版本
+function newVersion() {
+  if (!fileGroups.value.some(g => g.cur)) { message.info('当前版本还没有成果文件，先上传文件再新增版本'); return }
+  dialog.warning({
+    title: '新增版本', content: `把当前成果（软件版 / 文档版 / 报告）整体转入历史版本，并开始 V${currentVersionNo.value + 1}？`,
+    positiveText: '新增版本', negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await api.post(`/projects/${id}/files/new-version`)
+        message.success(`已开启 V${currentVersionNo.value + 1}，原成果整体转入历史版本`)
+        await load()
+      } catch (e) { message.error(errMsg(e)) }
+    }
+  })
+}
+function scrollToParse() {
+  document.getElementById('gcfxPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+async function downloadContractFile(c, f) {
+  const { data } = await api.get(`/contracts/${c.id}/files/${f.id}/download`, { responseType: 'blob' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(data)
+  a.download = f.fileName
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 800)
 }
 function pickFile(cb) {
   const inp = document.createElement('input')
@@ -197,16 +255,19 @@ async function unlink(contractId) {
   await load()
 }
 
-// 收款
+// 新增回款（与收费台账的弹窗保持一致：日期默认今天，字段相同）
 const showReceipt = ref(false)
-const rf = ref({ date: null, amount: null, method: '银行转账', handler: '', note: '' })
+const rf = ref({ date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' })
+function openReceipt() {
+  rf.value = { date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' }
+  showReceipt.value = true
+}
 async function addReceipt() {
   if (!rf.value.date || !rf.value.amount) { message.warning('请填写日期和金额'); return }
   try {
     await api.post(`/projects/${id}/receipts`, rf.value)
-    message.success('收款已登记')
+    message.success('回款已登记')
     showReceipt.value = false
-    rf.value = { date: null, amount: null, method: '银行转账', handler: '', note: '' }
     await load()
   } catch (e) { message.error(errMsg(e)) }
 }
@@ -242,7 +303,7 @@ const receiptColumns = [
           <div class="small mut" style="margin-top:6px">{{ p.client }} · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}</div>
         </div>
         <n-button @click="openEdit">编辑项目</n-button>
-        <n-button type="primary" @click="showReceipt = true">登记收款</n-button>
+        <n-button type="primary" @click="openReceipt">登记收款</n-button>
       </div>
       <div class="d-steps">
         <template v-for="(s, i) in STATUSES" :key="s">
@@ -285,15 +346,18 @@ const receiptColumns = [
         <div class="card">
           <div class="card-h"><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
           <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
-          <template v-else>
-            <div class="team-th"><span>成员</span><span>角色</span><span>人员职责</span><span style="text-align:right">占比</span></div>
-            <div class="team-it" v-for="t in d.team" :key="t.id">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0"><img :src="avatarFor(t)" :alt="t.name" /><b style="font-size:13px;white-space:nowrap">{{ t.name }}</b></div>
-              <span><span class="role-tag">{{ t.role }}</span></span>
-              <span class="duty">{{ t.duty || '—' }}</span>
-              <span class="share"><b class="num">{{ fmt(t.share) }}%</b></span>
+          <div class="team-it" v-for="t in d.team" :key="t.id">
+            <img :src="avatarFor(t)" :alt="t.name" />
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13.5px">{{ t.name }}</b><span class="role-tag">{{ t.role }}</span></div>
+              <div class="duty">{{ t.duty || '暂无职责说明' }}</div>
             </div>
-          </template>
+            <div class="share">
+              <b class="num">{{ fmt(t.share) }}%</b>
+              <div class="pbar"><i :style="{ width: Math.min(Number(t.share) || 0, 100) + '%' }"></i></div>
+              <span>工作占比</span>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -318,34 +382,46 @@ const receiptColumns = [
           </div>
 
           <div v-if="!d.contracts.length" class="faint small" style="padding:6px 0 12px">暂未关联合同，点右上角「关联合同」添加（合同金额在合同管理中维护）。</div>
-          <div v-for="c in d.contracts" :key="c.id" style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line-soft);flex-wrap:wrap">
-            <div style="flex:1;min-width:0">
-              <b style="font-size:13.5px">{{ c.name }}</b>
-              <n-tag v-if="c.isPrimary" size="tiny" type="success" :bordered="false" style="margin-left:6px">主合同</n-tag>
-              <n-tag size="tiny" :bordered="false" style="margin-left:4px">{{ c.type }}</n-tag>
-              <div class="psub">{{ c.no }} · {{ c.partyA || '—' }}</div>
+          <div v-for="c in d.contracts" :key="c.id" style="padding:9px 0;border-top:1px solid var(--line-soft)">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:0">
+                <b style="font-size:13.5px">{{ c.name }}</b>
+                <n-tag v-if="c.isPrimary" size="tiny" type="success" :bordered="false" style="margin-left:6px">主合同</n-tag>
+                <n-tag size="tiny" :bordered="false" style="margin-left:4px">{{ c.type }}</n-tag>
+                <div class="psub">{{ c.no }} · {{ c.partyA || '—' }}</div>
+              </div>
+              <div class="num" style="font-weight:650">{{ c.amount == null ? '按实结算' : fmt(c.amount) + ' 万' }}</div>
+              <n-button size="tiny" quaternary @click="unlink(c.id)">取消关联</n-button>
             </div>
-            <div class="num" style="font-weight:650">{{ c.amount == null ? '按实结算' : fmt(c.amount) + ' 万' }}</div>
-            <n-button size="tiny" quaternary @click="unlink(c.id)">取消关联</n-button>
+            <div v-if="c.files && c.files.length" style="margin-top:5px">
+              <div v-for="f in c.files" :key="f.id" style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--sub);padding:3px 0;flex-wrap:wrap">
+                <span style="min-width:0">📎 {{ f.fileName }}</span>
+                <span class="faint">{{ fmtSize(f.sizeBytes) }}</span>
+                <n-button v-if="fileKind(f.fileName) !== 'other'" size="tiny" quaternary @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
+                <n-button size="tiny" quaternary @click="downloadContractFile(c, f)">下载</n-button>
+              </div>
+            </div>
           </div>
 
-          <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">收款记录</b></div>
+          <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">收款记录</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button></div>
           <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
         </div>
 
         <div class="card">
           <div class="card-h"><h3>成果文件</h3><div class="sp"></div>
+            <n-tag size="small" type="success" :bordered="false">当前版本 V{{ currentVersionNo }}</n-tag>
             <n-tag v-if="gotCount === 3" type="success" size="small" :bordered="false">已集齐 3/3</n-tag>
             <n-tag v-else type="warning" size="small" :bordered="false">已传 {{ gotCount }}/3 · 缺{{ fileGroups.filter(g => !g.cur).map(g => g.label).join('、') }}</n-tag>
+            <n-button size="small" type="primary" @click="newVersion">+ 新增版本</n-button>
           </div>
-          <div class="small faint" style="margin-bottom:6px">出报告必传三类；当前上传的即为最终版，点「新增版本」更新后，旧版自动转入历史版本。</div>
+          <div class="small faint" style="margin-bottom:6px">软件版 / 文档版 / 报告是一个整体版本；点「新增版本」，当前三类文件一起转入历史版本，再上传新一版。</div>
           <div class="fcat" v-for="g in fileGroups" :key="g.key">
             <div class="fcat-h"><b style="font-size:13.5px">{{ g.label }}</b>
-              <n-tag v-if="g.cur" size="tiny" type="success" :bordered="false">最终版 V{{ g.cur.version }}</n-tag>
+              <n-tag v-if="g.cur" size="tiny" type="success" :bordered="false">当前版本</n-tag>
               <span v-else class="small" style="color:#9a6a12">未上传</span>
               <div style="flex:1"></div>
-              <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '+ 新增版本' : '上传最终版' }}</n-button>
+              <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
             </div>
             <div v-if="g.cur" class="file-it">
               <div class="file-ic">{{ g.icon }}</div>
@@ -353,24 +429,26 @@ const receiptColumns = [
                 <b style="font-size:13px">{{ g.cur.fileName }}</b>
                 <div class="psub">{{ fmtSize(g.cur.sizeBytes) }} · {{ String(g.cur.uploadedAt).slice(0, 10) }}<span v-if="parseOf(g.cur.id)"> · 已自动解析 · 工程造价 ¥{{ fmt(parseOf(g.cur.id).totalAmount) }}</span></div>
               </div>
-              <n-button v-if="parseOf(g.cur.id)" size="small" type="primary" @click="router.push(`/projects/${id}/gcfx/${g.cur.id}`)">查看解析</n-button>
+              <n-button v-if="parseOf(g.cur.id)" size="small" type="primary" @click="scrollToParse">查看解析</n-button>
               <n-button v-if="fileKind(g.cur.fileName) !== 'other'" size="small" @click="previewFile('deliverables', g.cur)">预览</n-button>
               <n-button size="small" @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)">下载</n-button>
-              <n-button size="small" quaternary @click="confirmDelete('删除最终版文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })">删除</n-button>
+              <n-button size="small" quaternary @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })">删除</n-button>
             </div>
             <div v-else class="small faint" style="padding:4px 0 8px">暂无文件</div>
-            <div v-if="g.hist.length" style="margin:2px 0 8px">
-              <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0" @click="toggleHist(g.key)">
-                <span class="small mut">历史版本（{{ g.hist.length }}）</span>
-                <span class="faint" style="margin-left:auto">{{ histOpen[g.key] ? '▾ 收起' : '▸ 展开' }}</span>
+          </div>
+          <div v-if="historyGroups.length" style="margin-top:6px;border-top:1px solid var(--line-soft);padding-top:8px">
+            <div v-for="hg in historyGroups" :key="hg.key" style="margin-bottom:2px">
+              <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0" @click="toggleHist(hg.key)">
+                <span class="small mut">{{ hg.label }}（{{ hg.files.length }}）</span>
+                <span class="faint" style="margin-left:auto">{{ histOpen[hg.key] ? '▾ 收起' : '▸ 展开' }}</span>
               </div>
-              <div v-if="histOpen[g.key]">
-                <div class="fhist" v-for="hf in g.hist" :key="hf.id">
-                  <n-tag size="tiny" :bordered="false">V{{ hf.version }} 历史版本</n-tag>
+              <div v-if="histOpen[hg.key]">
+                <div class="fhist" v-for="hf in hg.files" :key="hf.id">
+                  <n-tag size="tiny" :bordered="false">{{ hf.catLabel }}</n-tag>
                   <span style="flex:1;min-width:0">{{ hf.fileName }}<span class="faint"> · {{ String(hf.uploadedAt).slice(0, 10) }}</span></span>
                   <n-button v-if="fileKind(hf.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('deliverables', hf)">预览</n-button>
                   <n-button size="tiny" quaternary @click="downloadFile('deliverables', hf.id, hf.fileName)">下载</n-button>
-                  <n-button size="tiny" quaternary @click="confirmDelete('删除该历史版本？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })">删除</n-button>
+                  <n-button size="tiny" quaternary @click="confirmDelete('删除该历史文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })">删除</n-button>
                 </div>
               </div>
             </div>
@@ -399,6 +477,12 @@ const receiptColumns = [
               <n-button size="tiny" style="margin-top:4px" @click="pickFile(f => uploadDoc(g.cat, f))">+ 上传到此分类</n-button>
             </div>
           </div>
+        </div>
+
+        <!-- 造价解析（卡片内展示，不再单独页面） -->
+        <div class="card" id="gcfxPanel" v-if="gcfxTarget" style="grid-column:1 / -1">
+          <div class="card-h"><h3>造价解析</h3></div>
+          <GcfxPanel :parse="gcfxTarget.parse" :project="p" :file-name="gcfxTarget.fileName" />
         </div>
       </div>
     </div>
@@ -472,10 +556,10 @@ const receiptColumns = [
       </template>
     </n-modal>
 
-    <!-- 登记收款 -->
-    <n-modal v-model:show="showReceipt" preset="card" title="登记收款" style="width:480px;border-radius:16px">
+    <!-- 新增回款（与收费台账一致） -->
+    <n-modal v-model:show="showReceipt" preset="card" title="新增回款" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
-        <n-form-item label="收款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+        <n-form-item label="回款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
         <n-form-item label="金额（万元）"><n-input-number v-model:value="rf.amount" :min="0" style="width:100%" /></n-form-item>
         <n-grid :cols="2" :x-gap="12">
           <n-form-item-gi label="方式"><n-select v-model:value="rf.method" :options="['银行转账', '现金', '承兑汇票', '其他'].map(t => ({ label: t, value: t }))" /></n-form-item-gi>
@@ -486,7 +570,7 @@ const receiptColumns = [
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <n-button @click="showReceipt = false">取消</n-button>
-          <n-button type="primary" @click="addReceipt">保存收款</n-button>
+          <n-button type="primary" @click="addReceipt">保存回款</n-button>
         </div>
       </template>
     </n-modal>
