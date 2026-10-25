@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
 import { NButton } from 'naive-ui'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr } from '../utils'
@@ -9,6 +9,8 @@ import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 
 const route = useRoute()
+const router = useRouter()
+function goBack() { router.push('/projects') }
 const message = useMessage()
 const dialog = useDialog()
 const id = Number(route.params.id)
@@ -321,6 +323,11 @@ const receiptColumns = [
 
 <template>
   <div v-if="p">
+    <div style="margin-bottom:10px">
+      <n-button size="small" @click="goBack">
+        <span style="display:inline-flex;align-items:center;gap:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>返回台账</span>
+      </n-button>
+    </div>
     <!-- 头部 -->
     <div class="card d-head">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
@@ -376,7 +383,7 @@ const receiptColumns = [
 
       <div class="card">
         <div class="card-h"><span class="card-ic o"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><h3>合同与收费</h3><div class="sp"></div>
-          <n-button size="small" @click="showLink = true">关联合同</n-button>
+          <n-button size="small" :type="d.contracts.length ? 'default' : 'primary'" @click="showLink = true">关联合同</n-button>
         </div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <div class="fring sm">
@@ -411,13 +418,13 @@ const receiptColumns = [
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 13px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 <span style="min-width:0">{{ f.fileName }}</span>
                 <span class="faint">{{ fmtSize(f.sizeBytes) }}</span>
-                <n-button v-if="fileKind(f.fileName) !== 'other'" size="tiny" quaternary @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
+                <n-button size="tiny" quaternary @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
                 <n-button size="tiny" quaternary @click="downloadContractFile(c, f)">下载</n-button>
               </div>
             </div>
           </div>
           <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">收款记录</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button></div>
-          <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
+          <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
         </div>
       </div>

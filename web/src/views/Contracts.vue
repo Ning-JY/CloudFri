@@ -181,7 +181,7 @@ const columns = [
             <div style="font-size:13.5px">{{ f.fileName }}</div>
             <div class="psub">{{ fmtSize(f.sizeBytes) }} · {{ String(f.uploadedAt).slice(0, 10) }} · {{ f.uploadedBy || '' }}</div>
           </div>
-          <n-button v-if="fileKind(f.fileName) !== 'other'" size="small" @click="previewRef.open(`/contracts/${filesContract.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
+          <n-button size="small" @click="previewRef.open(`/contracts/${filesContract.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
           <n-button size="small" @click="downloadContractFile(f)">下载</n-button>
           <n-button size="small" quaternary @click="delContractFile(f)">删除</n-button>
         </div>

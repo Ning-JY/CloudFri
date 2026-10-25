@@ -56,6 +56,15 @@ public class ProjectsController : ControllerBase
                           orderby pm.Share descending
                           select new { pm.Id, pm.MemberId, m.Name, m.Gender, pm.Role, pm.Duty, pm.Share }).ToListAsync();
 
+        // 参与人员为空时默认展示项目负责人：角色「项目负责人」、职责「整体项目管理」（在「编辑分工」里保存后落库）
+        object teamOut = team;
+        if (team.Count == 0 && p.OwnerMemberId is int ownerId)
+        {
+            var om = await _db.Members.Where(m => m.Id == ownerId).Select(m => new { m.Name, m.Gender }).FirstOrDefaultAsync();
+            if (om != null)
+                teamOut = new[] { new { Id = 0, MemberId = ownerId, om.Name, om.Gender, Role = "项目负责人", Duty = (string?)"整体项目管理", Share = 100m } };
+        }
+
         var contracts = await (from pc in _db.ProjectContracts
                                join c in _db.Contracts on pc.ContractId equals c.Id
                                where pc.ProjectId == id
@@ -101,7 +110,7 @@ public class ProjectsController : ControllerBase
                 p.Status, p.OwnerMemberId, OwnerName = ownerName, p.AcceptedDate, p.DueDate, p.ReportDate, p.ReportNo,
                 p.SubmitAmount, p.ApprovedAmount, p.Fee, p.Description, p.CreatedAt, p.UpdatedAt
             },
-            Team = team,
+            Team = teamOut,
             Contracts = contracts,
             Receipts = receipts,
             ReceivedTotal = receipts.Sum(r => r.Amount),
@@ -128,6 +137,12 @@ public class ProjectsController : ControllerBase
         };
         _db.Projects.Add(p);
         await _db.SaveChangesAsync();
+        // 参与人员默认添加项目负责人：角色「项目负责人」、职责「整体项目管理」
+        if (p.OwnerMemberId is int ownerId)
+        {
+            _db.ProjectMembers.Add(new ProjectMember { ProjectId = p.Id, MemberId = ownerId, Role = "项目负责人", Duty = "整体项目管理", Share = 100 });
+            await _db.SaveChangesAsync();
+        }
         return Ok(new { p.Id, p.Code });
     }
 
