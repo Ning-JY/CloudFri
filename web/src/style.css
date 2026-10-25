@@ -121,12 +121,14 @@ body {
 .d-amounts .vl { font-size: 19px; font-weight: 750; }
 .d-amounts .sb { font-size: 12px; color: var(--faint); margin-top: 3px; }
 @media (max-width: 1100px) { .d-amounts { grid-template-columns: repeat(2, 1fr); } }
-/* 详情页第五版排版：首行三卡按比例分（不固定宽度），次行成果/资料与解析并排 */
-.d-top3 { display: grid; grid-template-columns: 1.05fr 1fr 1.15fr; gap: 14px; align-items: start; }
+/* 详情页第六版排版：首行两卡（参与人员/合同与收费）按比例分，次行成果/资料与解析并排；图标一律图形 SVG，不用文字字形 */
+.d-top2 { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; align-items: start; }
 .d-row2 { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
-@media (max-width: 1250px) { .d-top3 { grid-template-columns: 1fr 1fr; } .d-row2 { grid-template-columns: 1fr; } }
-@media (max-width: 820px) { .d-top3 { grid-template-columns: 1fr; } }
-.card-ic { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex: 0 0 26px; }
+@media (max-width: 1250px) { .d-row2 { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .d-top2 { grid-template-columns: 1fr; } }
+.rpt-chip { background: #f0eafd; color: #6d4fc2; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+.card-ic { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex: 0 0 26px; }
+.card-ic svg { width: 15px; height: 15px; }
 .card-ic.g { background: linear-gradient(135deg, #2e7d52, #186140); }
 .card-ic.b { background: linear-gradient(135deg, #5b83e6, #2f5fd0); }
 .card-ic.o { background: linear-gradient(135deg, #e8a04c, #b96a12); }
@@ -135,15 +137,18 @@ body {
 .d-amounts .a.t1 { background: #e8effe; }
 .d-amounts .a.t2 { background: #fdeeda; }
 .d-amounts .a.t3 { background: #f0eafd; }
-.team-scroll { max-height: 262px; overflow-y: auto; padding-right: 4px; }
 .fring.sm { width: 76px; height: 76px; flex: 0 0 76px; }
 .fring.sm svg { width: 76px; height: 76px; }
 .ftiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .ftile { border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 8px; text-align: center; background: rgba(246, 249, 247, .6); }
-.ftile-ic { width: 52px; height: 60px; margin: 0 auto; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
-.ftile-ic.cg, .fhist-ic.cg { background: #e2efe7; color: var(--pri); }
-.ftile-ic.cb, .fhist-ic.cb { background: #e8effe; color: #2f5fd0; }
-.ftile-ic.co, .fhist-ic.co { background: #fdeeda; color: #b96a12; }
+.ftile-ic { width: 52px; height: 60px; margin: 0 auto; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.ftile-ic svg { width: 26px; height: 26px; }
+.ftile-ic.cg { background: linear-gradient(135deg, #2e7d52, #186140); }
+.ftile-ic.cb { background: linear-gradient(135deg, #5b83e6, #2f5fd0); }
+.ftile-ic.co { background: linear-gradient(135deg, #e8a04c, #b96a12); }
+.fhist-ic.cg { background: #e2efe7; color: var(--pri); }
+.fhist-ic.cb { background: #e8effe; color: #2f5fd0; }
+.fhist-ic.co { background: #fdeeda; color: #b96a12; }
 .fhist-ic { width: 26px; height: 30px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800; flex: 0 0 26px; }
 .side-foot { margin-top: auto; padding: 8px 4px 0; }
 .collapse-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; background: transparent; border-radius: 10px; color: var(--sub); font-size: 12.5px; cursor: pointer; font-family: inherit; }

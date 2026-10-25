@@ -215,6 +215,22 @@ function confirmDelete(text, fn) {
   dialog.warning({ title: '确认删除', content: text, positiveText: '删除', negativeText: '取消', onPositiveClick: fn })
 }
 
+// 更改状态（头部按钮下拉直接切换，不必打开编辑弹窗）
+const statusOptions = computed(() => STATUSES.map(s => ({ label: s, key: s, disabled: p.value?.status === s })))
+async function changeStatus(key) {
+  const v = p.value
+  try {
+    await api.put('/projects/' + id, {
+      name: v.name, client: v.client, contactName: v.contactName, contactPhone: v.contactPhone,
+      bizType: v.bizType, scale: v.scale, status: key, ownerMemberId: v.ownerMemberId,
+      acceptedDate: v.acceptedDate, dueDate: v.dueDate, reportDate: v.reportDate, reportNo: v.reportNo,
+      submitAmount: v.submitAmount, approvedAmount: v.approvedAmount, fee: v.fee || 0, description: v.description
+    })
+    message.success('状态已改为「' + key + '」')
+    await load()
+  } catch (e) { message.error(errMsg(e)) }
+}
+
 // 编辑项目
 const showEdit = ref(false)
 const ef = ref({})
@@ -309,16 +325,17 @@ const receiptColumns = [
     <div class="card d-head">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
             <span class="num faint">{{ p.code }}</span>
             <n-tag size="small" :type="p.status === '已归档' ? 'default' : p.status === '已出报告' ? 'success' : 'warning'" :bordered="false">{{ p.status }}</n-tag>
             <n-tag size="small" :bordered="false">{{ p.bizType }}</n-tag>
-            <span v-if="p.reportNo" class="small faint">报告 {{ p.reportNo }}</span>
+            <span class="rpt-chip">报告编号：{{ p.reportNo || '—' }}</span>
           </div>
           <div class="d-title">{{ p.name }}</div>
-          <div class="small mut" style="margin-top:6px">{{ p.client }} · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}</div>
+          <div class="small mut" style="margin-top:6px">{{ p.client }}<span v-if="p.contactName"> · 联系人 {{ p.contactName }}<span v-if="p.contactPhone"> {{ p.contactPhone }}</span></span> · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}</div>
         </div>
         <n-button @click="openEdit">编辑项目</n-button>
+        <n-dropdown :options="statusOptions" @select="changeStatus"><n-button>更改状态</n-button></n-dropdown>
         <n-button type="primary" @click="openReceipt">登记收款</n-button>
       </div>
       <div class="d-steps">
@@ -336,29 +353,12 @@ const receiptColumns = [
       </div>
     </div>
 
-    <!-- 第一行：基本信息 / 参与人员 / 合同与收费（按比例分，不固定宽度） -->
-    <div class="d-top3">
+    <!-- 第一行：参与人员 / 合同与收费（按比例分；基本信息已并入头部与编辑弹窗，不再单设卡片） -->
+    <div class="d-top2">
       <div class="card">
-        <div class="card-h"><span class="card-ic g">基</span><h3>基本信息</h3></div>
-        <p class="d-desc">{{ p.description || '暂无项目概况。' }}</p>
-        <div class="kv-row"><span class="k">项目编号</span><span class="num">{{ p.code }}</span></div>
-        <div class="kv-row"><span class="k">委托单位</span><span>{{ p.client }}</span></div>
-        <div class="kv-row"><span class="k">联系人</span><span>{{ p.contactName || '—' }}</span></div>
-        <div class="kv-row"><span class="k">联系电话</span><span>{{ p.contactPhone || '—' }}</span></div>
-        <div class="kv-row"><span class="k">业务类型</span><span>{{ p.bizType }}</span></div>
-        <div class="kv-row"><span class="k">项目规模</span><span>{{ p.scale || '—' }}</span></div>
-        <div class="kv-row"><span class="k">负责人</span><span>{{ p.ownerName || '—' }}</span></div>
-        <div class="kv-row"><span class="k">项目状态</span><span>{{ p.status }}</span></div>
-        <div class="kv-row"><span class="k">承接日期</span><span class="num">{{ p.acceptedDate || '—' }}</span></div>
-        <div class="kv-row"><span class="k">要求完成</span><span class="num">{{ p.dueDate || '—' }}</span></div>
-        <div class="kv-row"><span class="k">出报告日期</span><span class="num">{{ p.reportDate || '—' }}</span></div>
-        <div class="kv-row"><span class="k">报告编号</span><span>{{ p.reportNo || '—' }}</span></div>
-      </div>
-
-      <div class="card">
-        <div class="card-h"><span class="card-ic b">人</span><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
+        <div class="card-h"><span class="card-ic b"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
         <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
-        <div class="team-scroll">
+        <div>
           <div class="team-it" v-for="t in d.team" :key="t.id">
             <img :src="avatarFor(t)" :alt="t.name" />
             <div style="flex:1;min-width:0">
@@ -375,7 +375,7 @@ const receiptColumns = [
       </div>
 
       <div class="card">
-        <div class="card-h"><span class="card-ic o">合</span><h3>合同与收费</h3><div class="sp"></div>
+        <div class="card-h"><span class="card-ic o"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span><h3>合同与收费</h3><div class="sp"></div>
           <n-button size="small" @click="showLink = true">关联合同</n-button>
         </div>
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
@@ -393,11 +393,7 @@ const receiptColumns = [
           </div>
         </div>
         <div class="small mut" style="margin-top:10px">{{ d.contracts.length }} 份合同<span v-if="contractAmount != null"> · 合同金额 {{ contractAmount === '按实结算' ? '按实结算' : fmt(contractAmount) + ' 万' }}</span> · 最近收款 {{ lastReceipt ? lastReceipt.date + ' · ' + fmt(lastReceipt.amount) + ' 万元' : '暂无' }}</div>
-        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button>
-          <n-button size="small" @click="showFeeDetail = !showFeeDetail">{{ showFeeDetail ? '收起详情 ▾' : '查看详情 ▸' }}</n-button>
-        </div>
-        <div v-if="showFeeDetail" style="margin-top:6px">
+        <div style="margin-top:6px">
           <div v-if="!d.contracts.length" class="faint small" style="padding:6px 0 12px">暂未关联合同，点右上角「关联合同」添加（合同金额在合同管理中维护）。</div>
           <div v-for="c in d.contracts" :key="c.id" style="padding:9px 0;border-top:1px solid var(--line-soft)">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -412,14 +408,15 @@ const receiptColumns = [
             </div>
             <div v-if="c.files && c.files.length" style="margin-top:5px">
               <div v-for="f in c.files" :key="f.id" style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--sub);padding:3px 0;flex-wrap:wrap">
-                <span style="min-width:0">📎 {{ f.fileName }}</span>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 13px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <span style="min-width:0">{{ f.fileName }}</span>
                 <span class="faint">{{ fmtSize(f.sizeBytes) }}</span>
                 <n-button v-if="fileKind(f.fileName) !== 'other'" size="tiny" quaternary @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
                 <n-button size="tiny" quaternary @click="downloadContractFile(c, f)">下载</n-button>
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">收款记录</b></div>
+          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">收款记录</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button></div>
           <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
         </div>
@@ -430,7 +427,7 @@ const receiptColumns = [
     <div class="d-row2">
       <div style="display:flex;flex-direction:column;min-width:0">
         <div class="card">
-          <div class="card-h"><span class="card-ic g">果</span><h3>成果文件</h3><div class="sp"></div>
+          <div class="card-h"><span class="card-ic g"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span><h3>成果文件</h3><div class="sp"></div>
             <n-tag size="small" type="success" :bordered="false">当前版本 V{{ currentVersionNo }}</n-tag>
             <n-tag v-if="gotCount === 3" type="success" size="small" :bordered="false">已集齐 3/3</n-tag>
             <n-tag v-else type="warning" size="small" :bordered="false">已传 {{ gotCount }}/3</n-tag>
@@ -439,7 +436,11 @@ const receiptColumns = [
           <div class="small faint" style="margin-bottom:10px">软件版 / 文档版 / 报告是一个整体版本；点「新增版本」，三类一起转入历史版本。</div>
           <div class="ftiles">
             <div class="ftile" v-for="g in fileGroups" :key="g.key">
-              <div class="ftile-ic" :class="g.cls">{{ g.icon }}</div>
+              <div class="ftile-ic" :class="g.cls">
+                <svg v-if="g.key === 'Software'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <svg v-else-if="g.key === 'Document'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+              </div>
               <div style="font-size:13px;font-weight:650;margin-top:8px">{{ g.label }}
                 <n-tag v-if="g.cur" size="tiny" type="success" :bordered="false">已上传</n-tag>
                 <span v-else class="small" style="color:#9a6a12;font-weight:500">未上传</span>
@@ -447,6 +448,7 @@ const receiptColumns = [
               <div class="psub" v-if="g.cur" :title="g.cur.fileName">{{ fmtSize(g.cur.sizeBytes) }} · {{ String(g.cur.uploadedAt).slice(0, 10) }}</div>
               <div class="psub" v-if="g.cur && parseOf(g.cur.id)" style="color:var(--pri);font-weight:600">解析造价 ¥{{ fmt(parseOf(g.cur.id).totalAmount) }}</div>
               <div class="psub" v-else-if="!g.cur">暂无文件</div>
+              <div class="psub" v-if="g.key === 'Report'" style="color:#6d4fc2;font-weight:600">报告编号：{{ p.reportNo || '—' }}</div>
               <div style="display:flex;gap:2px;margin-top:7px;flex-wrap:wrap;justify-content:center">
                 <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
                 <n-button v-if="g.cur && parseOf(g.cur.id)" size="tiny" quaternary @click="scrollToParse">解析</n-button>
@@ -464,7 +466,7 @@ const receiptColumns = [
               </div>
               <div v-if="histOpen[hg.key]">
                 <div class="fhist" v-for="hf in hg.files" :key="hf.id" style="padding-left:0">
-                  <span class="fhist-ic" :class="catCls(hf.category)">{{ catIcon(hf.category) }}</span>
+                  <span class="fhist-ic" :class="catCls(hf.category)"><svg viewBox="0 0 24 24" width="12" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
                   <n-tag size="tiny" :bordered="false">{{ hf.catLabel }}</n-tag>
                   <span class="faint">{{ fmtSize(hf.sizeBytes) }} · {{ String(hf.uploadedAt).slice(0, 10) }}</span>
                   <span style="flex:1"></span>
@@ -478,11 +480,11 @@ const receiptColumns = [
         </div>
 
         <div class="card">
-          <div class="card-h"><span class="card-ic b">资</span><h3>项目资料</h3></div>
+          <div class="card-h"><span class="card-ic b"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><h3>项目资料</h3></div>
           <div class="small faint" style="margin-bottom:4px">图纸、隐蔽资料、联系函等过程文件按分类归档，与成果文件分开保存。</div>
           <div class="doc-cat" v-for="g in docGroups" :key="g.cat">
             <div style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:3px 0" @click="openDocCat = openDocCat === g.cat ? '' : g.cat">
-              <span class="role-tag" style="background:#eef4f0;font-size:11.5px">{{ g.cat.slice(0, 1) }}</span>
+              <span class="role-tag" style="background:#eef4f0;display:inline-flex;padding:4px 5px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#186140" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
               <b style="font-size:13px">{{ g.cat }}</b>
               <span class="faint small">{{ g.files.length }} 个文件</span>
               <span class="faint" style="margin-left:auto">{{ openDocCat === g.cat ? '▾' : '▸' }}</span>
@@ -504,14 +506,14 @@ const receiptColumns = [
 
       <!-- 造价解析（与成果文件并排） -->
       <div class="card" id="gcfxPanel" v-if="gcfxTarget">
-        <div class="card-h"><span class="card-ic p">析</span><h3>造价解析</h3><div class="sp"></div>
+        <div class="card-h"><span class="card-ic p"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></span><h3>造价解析</h3><div class="sp"></div>
           <span class="small faint">{{ String(gcfxTarget.parse.parsedAt).slice(0, 16).replace('T', ' ') }} 解析</span>
           <n-button size="small" @click="reparse">重新解析</n-button>
         </div>
         <GcfxPanel :key="gcfxTarget.parse.id + '-' + gcfxTarget.parse.parsedAt" :parse="gcfxTarget.parse" :project="p" :file-name="gcfxTarget.fileName" />
       </div>
       <div class="card" v-else>
-        <div class="card-h"><span class="card-ic p">析</span><h3>造价解析</h3></div>
+        <div class="card-h"><span class="card-ic p"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></span><h3>造价解析</h3></div>
         <div class="faint small">暂无解析结果。上传 GCFX / SGCFX 成果文件后会自动解析并在这里展示。</div>
       </div>
     </div>
