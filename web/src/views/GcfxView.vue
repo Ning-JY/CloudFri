@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
-import { fmtMoney } from '../utils'
+import { fmt, fmtMoney } from '../utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -124,8 +124,11 @@ onMounted(async () => {
         <div class="kv-row"><span class="k">所在地区</span><span>{{ parse.region || '—' }}</span></div>
         <div class="kv-row"><span class="k">单位工程</span><span>{{ units.length }} 个：{{ units.join('、') }}</span></div>
         <div class="kv-row"><span class="k">源文件</span><span>{{ file?.fileName || '—' }}</span></div>
+        <div class="kv-row"><span class="k">台账送审金额</span><span class="num">{{ d.project.submitAmount != null ? fmt(d.project.submitAmount) + ' 万元' : '—' }}</span></div>
+        <div class="kv-row"><span class="k">台账审定金额</span><span class="num">{{ d.project.approvedAmount != null ? fmt(d.project.approvedAmount) + ' 万元' : '—' }}</span></div>
         <div class="kv-row"><span class="k">解析时间</span><span class="num">{{ String(parse.parsedAt).slice(0, 16).replace('T', ' ') }}</span></div>
         <div class="kv-row"><span class="k">解析说明</span><span class="mut">{{ parse.note }}</span></div>
+        <div class="kv-row"><span class="k">回填规则</span><span class="mut">GCFX 文件本身只有一个总造价，没有送审/审定两个金额；上传时按业务类型自动回填台账对应栏位（审核类 → 审定金额，其余 → 送审/预算/控制价栏），仅回填空栏，不覆盖手填值。</span></div>
       </div>
     </div>
 

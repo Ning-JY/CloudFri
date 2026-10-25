@@ -78,7 +78,45 @@ public class FilesController : ControllerBase
             }
             catch { /* 解析失败不阻塞上传 */ }
         }
-        return Ok(new { pf.Id, pf.Version, ParseId = parse?.Id });
+
+        // 金额回填：GCFX 文件内只有一个文件总造价（无送审/审定区分字段），按业务类型回填到对应栏位，
+        // 仅在栏位为空时回填，绝不覆盖用户手填值。审核类成果文件即审定成果 → 审定金额；其余 → 送审栏（预算/控制价/建安）。
+        string? filledField = null;
+        decimal? filledAmountWan = null;
+        if (parse?.TotalAmount is > 0 && category == "Software")
+        {
+            try
+            {
+                var proj = await _db.Projects.FindAsync(projectId);
+                if (proj != null)
+                {
+                    var wan = Math.Round(parse.TotalAmount.Value / 10000m, 2);
+                    if (proj.BizType is "结算审核" or "竣工决算")
+                    {
+                        if (proj.ApprovedAmount == null) { proj.ApprovedAmount = wan; filledField = "审定金额"; }
+                    }
+                    else if (proj.SubmitAmount == null)
+                    {
+                        proj.SubmitAmount = wan;
+                        filledField = proj.BizType switch
+                        {
+                            "预算编制" => "预算金额",
+                            "清单控制价" => "控制价金额",
+                            "跟踪审计" or "全过程咨询" => "建安造价",
+                            _ => "送审金额"
+                        };
+                    }
+                    if (filledField != null)
+                    {
+                        filledAmountWan = wan;
+                        proj.UpdatedAt = DateTime.Now;
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+            catch { /* 回填失败不阻塞上传 */ }
+        }
+        return Ok(new { pf.Id, pf.Version, ParseId = parse?.Id, FilledField = filledField, FilledAmountWan = filledAmountWan });
     }
 
     /// <summary>上传项目过程资料（按分类归档，只增不改版）。</summary>

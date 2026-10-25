@@ -116,7 +116,8 @@ async function uploadDeliverable(cat, file) {
   fd.append('file', file)
   try {
     const { data } = await api.post(`/projects/${id}/files/deliverables`, fd)
-    message.success(data.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，新版本已生效，旧版转历史')
+    if (data.filledField) message.success(`上传成功，已自动解析 GCFX，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万`)
+    else message.success(data.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，新版本已生效，旧版转历史')
     await load()
   } catch (e) { message.error(errMsg(e, '上传失败')) }
 }
@@ -165,8 +166,8 @@ async function saveEdit() {
 const showTeam = ref(false)
 const teamRows = ref([])
 function openTeam() {
-  teamRows.value = d.value.team.map(t => ({ memberId: t.memberId, role: t.role, share: t.share }))
-  if (!teamRows.value.length) teamRows.value = [{ memberId: null, role: '编制人', share: 40 }]
+  teamRows.value = d.value.team.map(t => ({ memberId: t.memberId, role: t.role, duty: t.duty || '', share: t.share }))
+  if (!teamRows.value.length) teamRows.value = [{ memberId: null, role: '编制人', duty: '', share: 40 }]
   showTeam.value = true
 }
 async function saveTeam() {
@@ -279,16 +280,20 @@ const receiptColumns = [
         </div>
       </div>
 
-      <!-- 右列（宽）：参与人员 + 合同与收费 + 成果文件 + 项目资料 -->
-      <div style="display:flex;flex-direction:column;gap:0;min-width:0">
+      <!-- 右列：两列紧凑网格（参与人员 | 合同与收费 / 成果文件 | 项目资料） -->
+      <div class="d-cols">
         <div class="card">
           <div class="card-h"><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
-          <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员与占比。</div>
-          <div class="team-it" v-for="t in d.team" :key="t.id">
-            <img :src="avatarFor(t)" :alt="t.name" />
-            <div><b style="font-size:13.5px">{{ t.name }}</b> <span class="role-tag" style="margin-left:4px">{{ t.role }}</span></div>
-            <div class="share"><b class="num">{{ fmt(t.share) }}%</b><span>工作占比</span></div>
-          </div>
+          <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
+          <template v-else>
+            <div class="team-th"><span>成员</span><span>角色</span><span>人员职责</span><span style="text-align:right">占比</span></div>
+            <div class="team-it" v-for="t in d.team" :key="t.id">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0"><img :src="avatarFor(t)" :alt="t.name" /><b style="font-size:13px;white-space:nowrap">{{ t.name }}</b></div>
+              <span><span class="role-tag">{{ t.role }}</span></span>
+              <span class="duty">{{ t.duty || '—' }}</span>
+              <span class="share"><b class="num">{{ fmt(t.share) }}%</b></span>
+            </div>
+          </template>
         </div>
 
         <div class="card">
@@ -313,7 +318,7 @@ const receiptColumns = [
           </div>
 
           <div v-if="!d.contracts.length" class="faint small" style="padding:6px 0 12px">暂未关联合同，点右上角「关联合同」添加（合同金额在合同管理中维护）。</div>
-          <div v-for="c in d.contracts" :key="c.id" style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line-soft)">
+          <div v-for="c in d.contracts" :key="c.id" style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line-soft);flex-wrap:wrap">
             <div style="flex:1;min-width:0">
               <b style="font-size:13.5px">{{ c.name }}</b>
               <n-tag v-if="c.isPrimary" size="tiny" type="success" :bordered="false" style="margin-left:6px">主合同</n-tag>
@@ -325,7 +330,7 @@ const receiptColumns = [
           </div>
 
           <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">收款记录</b></div>
-          <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" />
+          <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
         </div>
 
@@ -429,15 +434,19 @@ const receiptColumns = [
     </n-modal>
 
     <!-- 编辑团队 -->
-    <n-modal v-model:show="showTeam" preset="card" title="编辑团队分工" style="width:560px;border-radius:16px">
+    <n-modal v-model:show="showTeam" preset="card" title="编辑团队分工" style="width:760px;max-width:94vw;border-radius:16px">
+      <div style="display:flex;gap:8px;margin-bottom:6px;padding:0 2px" class="small faint">
+        <span style="flex:1.1">成员</span><span style="flex:0.9">角色</span><span style="flex:1.6">人员职责</span><span style="width:104px">占比</span><span style="width:32px"></span>
+      </div>
       <div v-for="(r, i) in teamRows" :key="i" style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
-        <n-select v-model:value="r.memberId" :options="members.map(m => ({ label: m.name, value: m.id }))" placeholder="成员" style="flex:1.2" />
-        <n-select v-model:value="r.role" :options="ROLES.map(t => ({ label: t, value: t }))" style="flex:1" />
-        <n-input-number v-model:value="r.share" :min="0" :max="100" style="width:110px" />
+        <n-select v-model:value="r.memberId" :options="members.map(m => ({ label: m.name, value: m.id }))" placeholder="成员" style="flex:1.1" />
+        <n-select v-model:value="r.role" :options="ROLES.map(t => ({ label: t, value: t }))" style="flex:0.9" />
+        <n-input v-model:value="r.duty" placeholder="如：土建清单编制与复核" style="flex:1.6" />
+        <n-input-number v-model:value="r.share" :min="0" :max="100" style="width:104px" />
         <span class="small mut">%</span>
         <n-button quaternary @click="teamRows.splice(i, 1)">✕</n-button>
       </div>
-      <n-button dashed block @click="teamRows.push({ memberId: null, role: '编制人', share: 0 })">+ 添加成员</n-button>
+      <n-button dashed block @click="teamRows.push({ memberId: null, role: '编制人', duty: '', share: 0 })">+ 添加成员</n-button>
       <p class="small faint" style="margin-top:10px">占比合计：{{ teamRows.reduce((a, r) => a + (r.share || 0), 0) }}%（建议合计 100%）</p>
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:10px">

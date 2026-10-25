@@ -55,13 +55,14 @@ public class Project
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }
 
-/// <summary>项目团队分工。Role：项目负责人/编制人/审核人/审定人/配合人员。Share 为工作占比 %。</summary>
+/// <summary>项目团队分工。Role：项目负责人/编制人/审核人/审定人/配合人员。Duty 为人员职责说明。Share 为工作占比 %。</summary>
 public class ProjectMember
 {
     public int Id { get; set; }
     public int ProjectId { get; set; }
     public int MemberId { get; set; }
     public string Role { get; set; } = "编制人";
+    public string? Duty { get; set; }
     public decimal Share { get; set; }
 }
 

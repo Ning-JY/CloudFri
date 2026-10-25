@@ -511,6 +511,9 @@ namespace CloudFri.Api.Data.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Duty")
+                        .HasColumnType("longtext");
+
                     b.Property<int>("MemberId")
                         .HasColumnType("int");
 

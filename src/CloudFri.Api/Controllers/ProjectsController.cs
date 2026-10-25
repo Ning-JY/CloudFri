@@ -20,7 +20,7 @@ public class ProjectsController : ControllerBase
         DateOnly? AcceptedDate, DateOnly? DueDate, DateOnly? ReportDate, string? ReportNo,
         decimal? SubmitAmount, decimal? ApprovedAmount, decimal Fee, string? Description);
 
-    public record TeamItem(int MemberId, string Role, decimal Share);
+    public record TeamItem(int MemberId, string Role, decimal Share, string? Duty = null);
 
     [HttpGet]
     public async Task<IActionResult> List(string? q = null, string? status = null, string? bizType = null, int? ownerId = null, int? year = null)
@@ -54,7 +54,7 @@ public class ProjectsController : ControllerBase
                           join m in _db.Members on pm.MemberId equals m.Id
                           where pm.ProjectId == id
                           orderby pm.Share descending
-                          select new { pm.Id, pm.MemberId, m.Name, m.Gender, pm.Role, pm.Share }).ToListAsync();
+                          select new { pm.Id, pm.MemberId, m.Name, m.Gender, pm.Role, pm.Duty, pm.Share }).ToListAsync();
 
         var contracts = await (from pc in _db.ProjectContracts
                                join c in _db.Contracts on pc.ContractId equals c.Id
@@ -152,14 +152,14 @@ public class ProjectsController : ControllerBase
         return Ok(new { p.Id });
     }
 
-    /// <summary>整体替换项目团队（角色 + 占比）。</summary>
+    /// <summary>整体替换项目团队（角色 + 职责 + 占比）。</summary>
     [HttpPut("{id:int}/team")]
     public async Task<IActionResult> SetTeam(int id, List<TeamItem> items)
     {
         if (!await _db.Projects.AnyAsync(x => x.Id == id)) return NotFound();
         _db.ProjectMembers.RemoveRange(_db.ProjectMembers.Where(x => x.ProjectId == id));
         foreach (var it in items)
-            _db.ProjectMembers.Add(new ProjectMember { ProjectId = id, MemberId = it.MemberId, Role = it.Role, Share = it.Share });
+            _db.ProjectMembers.Add(new ProjectMember { ProjectId = id, MemberId = it.MemberId, Role = it.Role, Duty = string.IsNullOrWhiteSpace(it.Duty) ? null : it.Duty.Trim(), Share = it.Share });
         await _db.SaveChangesAsync();
         return Ok(new { count = items.Count });
     }
