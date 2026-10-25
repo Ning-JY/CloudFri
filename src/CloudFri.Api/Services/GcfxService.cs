@@ -52,17 +52,29 @@ public static class GcfxService
         if (city != null) regionPool = regionPool.Where(s => s.StartsWith(city));
         var region = regionPool.OrderByDescending(s => counts[s]).FirstOrDefault();
 
-        // 工程名称：优先「项目名称：」标注后的内容；否则取含「建设项目」的长串
+        // 工程名称：优先「项目名称：/工程名称：」标注后的内容（小文件里标注值可能很短，如单项工程导出）；
+        // 剥掉标注值开头的序号（如 "1."）；否则取含「建设项目」的长串
         string? projectName = null;
-        var labeled = strings.Where(s => s.Contains("项目名称") && s.Contains('：') && s.Length - s.IndexOf('：') > 8)
-            .OrderByDescending(s => counts[s]).FirstOrDefault();
-        if (labeled != null) projectName = labeled[(labeled.IndexOf('：') + 1)..].Trim();
+        var labeled = strings
+            .Where(s => (s.Contains("项目名称") || s.Contains("工程名称")) && (s.Contains('：') || s.Contains(':')))
+            .Select(s =>
+            {
+                var idx = s.IndexOfAny(new[] { '：', ':' });
+                var v = idx >= 0 ? s[(idx + 1)..].Trim() : "";
+                v = Regex.Replace(v, @"^\d+[\.、]\s*", "");
+                return (Orig: s, Val: v);
+            })
+            .Where(x => x.Val.Length >= 2)
+            .OrderByDescending(x => counts[x.Orig])
+            .FirstOrDefault();
+        projectName = labeled.Val;
         projectName ??= strings.Where(s => s.Contains("建设项目") && s.Length is >= 10 and <= 80 && !s.Contains("。"))
             .OrderByDescending(s => counts[s]).FirstOrDefault();
 
-        // 单位工程构成：以「工程」结尾、无标点的短串中频次 ≥8 者（真实单位工程会在各报表反复出现，模板枚举只有个位数）
+        // 单位工程构成：以「工程」结尾、无标点的短串中频次 ≥4 者（大文件真实单位工程频次高；
+        // 小文件/单项导出频次低，门槛过高会整表提空——2026-10-25 SGCFX 实测教训）
         var units = strings.Where(s => s.EndsWith("工程") && s.Length is >= 4 and <= 20
-                && !Regex.IsMatch(s, @"[，。：；、（）()\d]") && counts[s] >= 8 && s != projectName)
+                && !Regex.IsMatch(s, @"[，。：；、（）()\d]") && counts[s] >= 4 && s != projectName)
             .OrderByDescending(s => counts[s])
             .Take(20).ToList();
 

@@ -88,7 +88,7 @@ public class ProjectsController : ControllerBase
         var ownerName = p.OwnerMemberId == null ? null
             : await _db.Members.Where(m => m.Id == p.OwnerMemberId).Select(m => m.Name).FirstOrDefaultAsync();
 
-        var gcfxFileIds = files.Where(f => f.Category == "Software").Select(f => f.Id).ToList();
+        var gcfxFileIds = files.Select(f => f.Id).ToList();
         var parses = await _db.GcfxParses.Where(g => gcfxFileIds.Contains(g.ProjectFileId))
             .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.Note, g.ParsedAt })
             .ToListAsync();

@@ -5,6 +5,8 @@ import { fmt, fmtMoney } from '../utils'
 // 造价解析卡片（原独立解析页的全部内容，改为在项目详情页卡片内展示）：
 // 头部金额带 + 六页签（概览/报价汇总/分部分项清单/工料机汇总/费用汇总/工程信息）。
 const props = defineProps({ parse: { type: Object, default: null }, project: { type: Object, default: null }, fileName: { type: String, default: '' } })
+// 标题：优先解析出的工程名；提不到时用源文件名（去扩展名），避免看起来像没刷新
+const fileTitle = computed(() => props.fileName ? props.fileName.replace(/\.[^.]+$/, '') : '')
 const tab = ref('ov')
 const units = computed(() => {
   try { return props.parse?.unitsJson ? JSON.parse(props.parse.unitsJson) : [] } catch { return [] }
@@ -23,7 +25,7 @@ const TABS = [
   <div v-if="parse">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
-        <div style="font-size:15px;font-weight:700">{{ parse.projectName || project?.name }}</div>
+        <div style="font-size:15px;font-weight:700">{{ parse.projectName || fileTitle || project?.name }}</div>
         <div class="small mut" style="margin-top:4px">{{ fileName }} · 上传后自动解析 · 宏业清单计价文件（GCFX）</div>
       </div>
       <n-tag type="success" :bordered="false">已自动解析</n-tag>

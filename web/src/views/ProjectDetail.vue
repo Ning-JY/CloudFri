@@ -22,13 +22,17 @@ const STATUSES = ['编制中', '审核中', '已出报告', '已归档']
 const ROLES = ['项目负责人', '编制人', '审核人', '审定人', '配合人员']
 const DOC_CATS = ['设计图纸', '隐蔽工程资料', '工作联系函', '会议纪要', '其他资料']
 const FILE_CATS = [
-  { key: 'Software', label: '软件版', icon: 'GCFX' },
-  { key: 'Document', label: '文档版', icon: 'XLS' },
-  { key: 'Report', label: '报告', icon: 'PDF' }
+  { key: 'Software', label: '软件版', icon: 'GCFX', cls: 'cg' },
+  { key: 'Document', label: '文档版', icon: 'XLS', cls: 'cb' },
+  { key: 'Report', label: '报告', icon: 'PDF', cls: 'co' }
 ]
+const catIcon = (key) => FILE_CATS.find(c => c.key === key)?.icon || 'FILE'
+const catCls = (key) => FILE_CATS.find(c => c.key === key)?.cls || 'cg'
+const showFeeDetail = ref(false)
 
 async function load() {
-  const { data } = await api.get('/projects/' + id)
+  // 带时间戳参数，避免浏览器缓存旧详情（重传 GCFX 后解析不刷新的投诉对策）
+  const { data } = await api.get('/projects/' + id, { params: { t: Date.now() } })
   d.value = data
 }
 onMounted(async () => {
@@ -181,6 +185,18 @@ function newVersion() {
 function scrollToParse() {
   document.getElementById('gcfxPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+// 重新解析当前展示的 GCFX（解析器升级后刷新旧结果）
+async function reparse() {
+  const t = gcfxTarget.value
+  if (!t) return
+  const f = d.value.files.find(x => x.id === t.parse.projectFileId)
+  if (!f) { message.warning('源文件不存在'); return }
+  try {
+    const { data } = await api.post(`/projects/${id}/files/deliverables/${f.id}/reparse`)
+    message.success(`重新解析完成，工程总造价 ¥${fmt(data.totalAmount)}` + (data.filledField ? `，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万` : ''))
+    await load()
+  } catch (e) { message.error(errMsg(e, '重新解析失败')) }
+}
 async function downloadContractFile(c, f) {
   const { data } = await api.get(`/contracts/${c.id}/files/${f.id}/download`, { responseType: 'blob' })
   const a = document.createElement('a')
@@ -314,38 +330,35 @@ const receiptColumns = [
         </template>
       </div>
       <div class="d-amounts">
-        <div class="a" v-for="a in amounts" :key="a.lb">
+        <div class="a" :class="'t' + (i % 4)" v-for="(a, i) in amounts" :key="a.lb">
           <div class="lb">{{ a.lb }}</div><div class="vl num">{{ a.vl }}</div><div class="sb">{{ a.sb }}</div>
         </div>
       </div>
     </div>
 
-    <div class="d-grid">
-      <!-- 左列（窄长）：基本信息 -->
-      <div style="display:flex;flex-direction:column;gap:0;min-width:0">
-        <div class="card">
-          <div class="card-h"><h3>基本信息</h3></div>
-          <p class="d-desc">{{ p.description || '暂无项目概况。' }}</p>
-          <div class="kv-row"><span class="k">项目编号</span><span class="num">{{ p.code }}</span></div>
-          <div class="kv-row"><span class="k">委托单位</span><span>{{ p.client }}</span></div>
-          <div class="kv-row"><span class="k">联系人</span><span>{{ p.contactName || '—' }}</span></div>
-          <div class="kv-row"><span class="k">联系电话</span><span>{{ p.contactPhone || '—' }}</span></div>
-          <div class="kv-row"><span class="k">业务类型</span><span>{{ p.bizType }}</span></div>
-          <div class="kv-row"><span class="k">项目规模</span><span>{{ p.scale || '—' }}</span></div>
-          <div class="kv-row"><span class="k">负责人</span><span>{{ p.ownerName || '—' }}</span></div>
-          <div class="kv-row"><span class="k">项目状态</span><span>{{ p.status }}</span></div>
-          <div class="kv-row"><span class="k">承接日期</span><span class="num">{{ p.acceptedDate || '—' }}</span></div>
-          <div class="kv-row"><span class="k">要求完成</span><span class="num">{{ p.dueDate || '—' }}</span></div>
-          <div class="kv-row"><span class="k">出报告日期</span><span class="num">{{ p.reportDate || '—' }}</span></div>
-          <div class="kv-row"><span class="k">报告编号</span><span>{{ p.reportNo || '—' }}</span></div>
-        </div>
+    <!-- 第一行：基本信息 / 参与人员 / 合同与收费（按比例分，不固定宽度） -->
+    <div class="d-top3">
+      <div class="card">
+        <div class="card-h"><span class="card-ic g">基</span><h3>基本信息</h3></div>
+        <p class="d-desc">{{ p.description || '暂无项目概况。' }}</p>
+        <div class="kv-row"><span class="k">项目编号</span><span class="num">{{ p.code }}</span></div>
+        <div class="kv-row"><span class="k">委托单位</span><span>{{ p.client }}</span></div>
+        <div class="kv-row"><span class="k">联系人</span><span>{{ p.contactName || '—' }}</span></div>
+        <div class="kv-row"><span class="k">联系电话</span><span>{{ p.contactPhone || '—' }}</span></div>
+        <div class="kv-row"><span class="k">业务类型</span><span>{{ p.bizType }}</span></div>
+        <div class="kv-row"><span class="k">项目规模</span><span>{{ p.scale || '—' }}</span></div>
+        <div class="kv-row"><span class="k">负责人</span><span>{{ p.ownerName || '—' }}</span></div>
+        <div class="kv-row"><span class="k">项目状态</span><span>{{ p.status }}</span></div>
+        <div class="kv-row"><span class="k">承接日期</span><span class="num">{{ p.acceptedDate || '—' }}</span></div>
+        <div class="kv-row"><span class="k">要求完成</span><span class="num">{{ p.dueDate || '—' }}</span></div>
+        <div class="kv-row"><span class="k">出报告日期</span><span class="num">{{ p.reportDate || '—' }}</span></div>
+        <div class="kv-row"><span class="k">报告编号</span><span>{{ p.reportNo || '—' }}</span></div>
       </div>
 
-      <!-- 右列：两列紧凑网格（参与人员 | 合同与收费 / 成果文件 | 项目资料） -->
-      <div class="d-cols">
-        <div class="card">
-          <div class="card-h"><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
-          <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
+      <div class="card">
+        <div class="card-h"><span class="card-ic b">人</span><h3>参与人员</h3><div class="sp"></div><n-button size="small" @click="openTeam">编辑分工</n-button></div>
+        <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
+        <div class="team-scroll">
           <div class="team-it" v-for="t in d.team" :key="t.id">
             <img :src="avatarFor(t)" :alt="t.name" />
             <div style="flex:1;min-width:0">
@@ -359,28 +372,32 @@ const receiptColumns = [
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="card">
-          <div class="card-h"><h3>合同与收费</h3><div class="sp"></div>
-            <span class="small faint">{{ d.contracts.length }} 份关联合同</span>
-            <n-button size="small" @click="showLink = true">关联合同</n-button>
+      <div class="card">
+        <div class="card-h"><span class="card-ic o">合</span><h3>合同与收费</h3><div class="sp"></div>
+          <n-button size="small" @click="showLink = true">关联合同</n-button>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="fring sm">
+            <svg width="76" height="76" viewBox="0 0 96 96">
+              <circle class="bgc" cx="48" cy="48" r="40" />
+              <circle class="vlc" cx="48" cy="48" r="40" stroke-dasharray="251.3" :stroke-dashoffset="ringOffset" />
+            </svg>
+            <div class="fring-t"><b class="num" style="font-size:16px">{{ feePct }}%</b><span>收款进度</span></div>
           </div>
-          <div class="head-fee" style="margin:2px 0 16px">
-            <div class="fring">
-              <svg width="96" height="96" viewBox="0 0 96 96">
-                <circle class="bgc" cx="48" cy="48" r="40" />
-                <circle class="vlc" cx="48" cy="48" r="40" stroke-dasharray="251.3" :stroke-dashoffset="ringOffset" />
-              </svg>
-              <div class="fring-t"><b class="num">{{ feePct }}%</b><span>收款进度</span></div>
-            </div>
-            <div class="fee-stats">
-              <div><span>咨询费应收</span><b class="num">{{ fmt(p.fee) }} 万</b></div>
-              <div><span>已收</span><b class="num">{{ fmt(received) }} 万</b></div>
-              <div><span>待收</span><b class="num neg">{{ fmt(Math.max(p.fee - received, 0)) }} 万</b></div>
-            </div>
-            <div class="small mut" style="margin-left:auto">最近收款 {{ lastReceipt ? lastReceipt.date + ' · ' + fmt(lastReceipt.amount) + ' 万元' : '暂无收款' }}</div>
+          <div class="fee-stats" style="gap:18px">
+            <div><span>咨询费应收</span><b class="num">{{ fmt(p.fee) }} 万</b></div>
+            <div><span>已收</span><b class="num">{{ fmt(received) }} 万</b></div>
+            <div><span>待收</span><b class="num neg">{{ fmt(Math.max(p.fee - received, 0)) }} 万</b></div>
           </div>
-
+        </div>
+        <div class="small mut" style="margin-top:10px">{{ d.contracts.length }} 份合同<span v-if="contractAmount != null"> · 合同金额 {{ contractAmount === '按实结算' ? '按实结算' : fmt(contractAmount) + ' 万' }}</span> · 最近收款 {{ lastReceipt ? lastReceipt.date + ' · ' + fmt(lastReceipt.amount) + ' 万元' : '暂无' }}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button>
+          <n-button size="small" @click="showFeeDetail = !showFeeDetail">{{ showFeeDetail ? '收起详情 ▾' : '查看详情 ▸' }}</n-button>
+        </div>
+        <div v-if="showFeeDetail" style="margin-top:6px">
           <div v-if="!d.contracts.length" class="faint small" style="padding:6px 0 12px">暂未关联合同，点右上角「关联合同」添加（合同金额在合同管理中维护）。</div>
           <div v-for="c in d.contracts" :key="c.id" style="padding:9px 0;border-top:1px solid var(--line-soft)">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -402,50 +419,55 @@ const receiptColumns = [
               </div>
             </div>
           </div>
-
-          <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">收款记录</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button></div>
+          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">收款记录</b></div>
           <n-data-table size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
         </div>
+      </div>
+    </div>
 
+    <!-- 第二行：左列 成果文件 + 项目资料（上下放）；右列 造价解析（并排） -->
+    <div class="d-row2">
+      <div style="display:flex;flex-direction:column;min-width:0">
         <div class="card">
-          <div class="card-h"><h3>成果文件</h3><div class="sp"></div>
+          <div class="card-h"><span class="card-ic g">果</span><h3>成果文件</h3><div class="sp"></div>
             <n-tag size="small" type="success" :bordered="false">当前版本 V{{ currentVersionNo }}</n-tag>
             <n-tag v-if="gotCount === 3" type="success" size="small" :bordered="false">已集齐 3/3</n-tag>
-            <n-tag v-else type="warning" size="small" :bordered="false">已传 {{ gotCount }}/3 · 缺{{ fileGroups.filter(g => !g.cur).map(g => g.label).join('、') }}</n-tag>
+            <n-tag v-else type="warning" size="small" :bordered="false">已传 {{ gotCount }}/3</n-tag>
             <n-button size="small" type="primary" @click="newVersion">+ 新增版本</n-button>
           </div>
-          <div class="small faint" style="margin-bottom:6px">软件版 / 文档版 / 报告是一个整体版本；点「新增版本」，当前三类文件一起转入历史版本，再上传新一版。</div>
-          <div class="fcat" v-for="g in fileGroups" :key="g.key">
-            <div class="fcat-h"><b style="font-size:13.5px">{{ g.label }}</b>
-              <n-tag v-if="g.cur" size="tiny" type="success" :bordered="false">当前版本</n-tag>
-              <span v-else class="small" style="color:#9a6a12">未上传</span>
-              <div style="flex:1"></div>
-              <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
-            </div>
-            <div v-if="g.cur" class="file-it">
-              <div class="file-ic">{{ g.icon }}</div>
-              <div style="flex:1;min-width:0">
-                <b style="font-size:13px">{{ g.cur.fileName }}</b>
-                <div class="psub">{{ fmtSize(g.cur.sizeBytes) }} · {{ String(g.cur.uploadedAt).slice(0, 10) }}<span v-if="parseOf(g.cur.id)"> · 已自动解析 · 工程造价 ¥{{ fmt(parseOf(g.cur.id).totalAmount) }}</span></div>
+          <div class="small faint" style="margin-bottom:10px">软件版 / 文档版 / 报告是一个整体版本；点「新增版本」，三类一起转入历史版本。</div>
+          <div class="ftiles">
+            <div class="ftile" v-for="g in fileGroups" :key="g.key">
+              <div class="ftile-ic" :class="g.cls">{{ g.icon }}</div>
+              <div style="font-size:13px;font-weight:650;margin-top:8px">{{ g.label }}
+                <n-tag v-if="g.cur" size="tiny" type="success" :bordered="false">已上传</n-tag>
+                <span v-else class="small" style="color:#9a6a12;font-weight:500">未上传</span>
               </div>
-              <n-button v-if="parseOf(g.cur.id)" size="small" type="primary" @click="scrollToParse">查看解析</n-button>
-              <n-button v-if="fileKind(g.cur.fileName) !== 'other'" size="small" @click="previewFile('deliverables', g.cur)">预览</n-button>
-              <n-button size="small" @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)">下载</n-button>
-              <n-button size="small" quaternary @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })">删除</n-button>
+              <div class="psub" v-if="g.cur" :title="g.cur.fileName">{{ fmtSize(g.cur.sizeBytes) }} · {{ String(g.cur.uploadedAt).slice(0, 10) }}</div>
+              <div class="psub" v-if="g.cur && parseOf(g.cur.id)" style="color:var(--pri);font-weight:600">解析造价 ¥{{ fmt(parseOf(g.cur.id).totalAmount) }}</div>
+              <div class="psub" v-else-if="!g.cur">暂无文件</div>
+              <div style="display:flex;gap:2px;margin-top:7px;flex-wrap:wrap;justify-content:center">
+                <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
+                <n-button v-if="g.cur && parseOf(g.cur.id)" size="tiny" quaternary @click="scrollToParse">解析</n-button>
+                <n-button v-if="g.cur && fileKind(g.cur.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('deliverables', g.cur)">预览</n-button>
+                <n-button v-if="g.cur" size="tiny" quaternary @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)">下载</n-button>
+                <n-button v-if="g.cur" size="tiny" quaternary @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })">删除</n-button>
+              </div>
             </div>
-            <div v-else class="small faint" style="padding:4px 0 8px">暂无文件</div>
           </div>
-          <div v-if="historyGroups.length" style="margin-top:6px;border-top:1px solid var(--line-soft);padding-top:8px">
+          <div v-if="historyGroups.length" style="margin-top:10px;border-top:1px solid var(--line-soft);padding-top:8px">
             <div v-for="hg in historyGroups" :key="hg.key" style="margin-bottom:2px">
               <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0" @click="toggleHist(hg.key)">
                 <span class="small mut">{{ hg.label }}（{{ hg.files.length }}）</span>
                 <span class="faint" style="margin-left:auto">{{ histOpen[hg.key] ? '▾ 收起' : '▸ 展开' }}</span>
               </div>
               <div v-if="histOpen[hg.key]">
-                <div class="fhist" v-for="hf in hg.files" :key="hf.id">
+                <div class="fhist" v-for="hf in hg.files" :key="hf.id" style="padding-left:0">
+                  <span class="fhist-ic" :class="catCls(hf.category)">{{ catIcon(hf.category) }}</span>
                   <n-tag size="tiny" :bordered="false">{{ hf.catLabel }}</n-tag>
-                  <span style="flex:1;min-width:0">{{ hf.fileName }}<span class="faint"> · {{ String(hf.uploadedAt).slice(0, 10) }}</span></span>
+                  <span class="faint">{{ fmtSize(hf.sizeBytes) }} · {{ String(hf.uploadedAt).slice(0, 10) }}</span>
+                  <span style="flex:1"></span>
                   <n-button v-if="fileKind(hf.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('deliverables', hf)">预览</n-button>
                   <n-button size="tiny" quaternary @click="downloadFile('deliverables', hf.id, hf.fileName)">下载</n-button>
                   <n-button size="tiny" quaternary @click="confirmDelete('删除该历史文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })">删除</n-button>
@@ -456,7 +478,7 @@ const receiptColumns = [
         </div>
 
         <div class="card">
-          <div class="card-h"><h3>项目资料</h3></div>
+          <div class="card-h"><span class="card-ic b">资</span><h3>项目资料</h3></div>
           <div class="small faint" style="margin-bottom:4px">图纸、隐蔽资料、联系函等过程文件按分类归档，与成果文件分开保存。</div>
           <div class="doc-cat" v-for="g in docGroups" :key="g.cat">
             <div style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:3px 0" @click="openDocCat = openDocCat === g.cat ? '' : g.cat">
@@ -478,12 +500,19 @@ const receiptColumns = [
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- 造价解析（卡片内展示，不再单独页面） -->
-        <div class="card" id="gcfxPanel" v-if="gcfxTarget" style="grid-column:1 / -1">
-          <div class="card-h"><h3>造价解析</h3></div>
-          <GcfxPanel :parse="gcfxTarget.parse" :project="p" :file-name="gcfxTarget.fileName" />
+      <!-- 造价解析（与成果文件并排） -->
+      <div class="card" id="gcfxPanel" v-if="gcfxTarget">
+        <div class="card-h"><span class="card-ic p">析</span><h3>造价解析</h3><div class="sp"></div>
+          <span class="small faint">{{ String(gcfxTarget.parse.parsedAt).slice(0, 16).replace('T', ' ') }} 解析</span>
+          <n-button size="small" @click="reparse">重新解析</n-button>
         </div>
+        <GcfxPanel :key="gcfxTarget.parse.id + '-' + gcfxTarget.parse.parsedAt" :parse="gcfxTarget.parse" :project="p" :file-name="gcfxTarget.fileName" />
+      </div>
+      <div class="card" v-else>
+        <div class="card-h"><span class="card-ic p">析</span><h3>造价解析</h3></div>
+        <div class="faint small">暂无解析结果。上传 GCFX / SGCFX 成果文件后会自动解析并在这里展示。</div>
       </div>
     </div>
 
