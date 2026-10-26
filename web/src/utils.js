@@ -62,7 +62,13 @@ export function cutRate(p) {
   return null
 }
 
-// 头像：按成员 id 与性别稳定映射到 randomuser 照片（正式版可换本地头像）
+// 预设头像库（randomuser 照片，按性别分组供成员表单挑选；选中后存 Member.AvatarPath）
+export const AVATAR_PRESETS = {
+  M: Array.from({ length: 36 }, (_, i) => `https://randomuser.me/api/portraits/men/${i}.jpg`),
+  F: Array.from({ length: 36 }, (_, i) => `https://randomuser.me/api/portraits/women/${i}.jpg`)
+}
+
+// 头像：优先成员自选头像（avatarPath），否则按成员 id 与性别稳定映射到 randomuser 照片（正式版可换本地头像）
 const AVATAR_N = { 1: ['men', 52], 2: ['men', 32], 3: ['women', 44], 4: ['men', 22], 5: ['men', 41], 6: ['women', 68], 7: ['women', 12], 8: ['men', 15], 9: ['women', 33], 10: ['men', 54], 11: ['women', 26] }
 export function avatarFor(member) {
   if (!member) return ''

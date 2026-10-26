@@ -399,7 +399,7 @@ const receiptColumns = [
         <div v-if="!d.team.length" class="faint small">暂未设置团队，点「编辑分工」添加成员、职责与占比。</div>
         <div>
           <div class="team-it" v-for="t in d.team" :key="t.id">
-            <img :src="avatarFor(t)" :alt="t.name" />
+            <img :src="avatarFor({ id: t.memberId, gender: t.gender, avatarPath: t.avatarPath })" :alt="t.name" />
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font-size:13.5px">{{ t.name }}</b><span class="role-tag">{{ t.role }}</span></div>
               <div class="duty">{{ t.duty || '暂无职责说明' }}</div>

@@ -2,7 +2,7 @@
 import { ref, onMounted, h } from 'vue'
 import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { avatarFor, iconBtn } from '../utils'
+import { avatarFor, iconBtn, AVATAR_PRESETS } from '../utils'
 import { useAuthStore } from '../stores/auth'
 
 const message = useMessage()
@@ -27,8 +27,13 @@ onMounted(loadAll)
 // 成员
 const showMember = ref(false)
 const mf = ref({})
+const avatarTab = ref('M')
 const DEPARTMENTS = ['工程咨询事业部', '协作人员']
-function openMember(m) { mf.value = m ? { ...m } : { name: '', gender: 'M', phone: '', department: '工程咨询事业部', remark: '', sort: members.value.length + 1 }; showMember.value = true }
+function openMember(m) {
+  mf.value = m ? { ...m } : { name: '', gender: 'M', phone: '', department: '工程咨询事业部', remark: '', avatarPath: null, sort: members.value.length + 1 }
+  avatarTab.value = mf.value.gender === 'F' ? 'F' : 'M'
+  showMember.value = true
+}
 async function saveMember() {
   try {
     if (mf.value.id) await api.put('/members/' + mf.value.id, mf.value)
@@ -36,9 +41,9 @@ async function saveMember() {
     message.success('已保存'); showMember.value = false; loadAll()
   } catch (e) { message.error(errMsg(e)) }
 }
-async function deactivateMember(m) {
-  await api.delete('/members/' + m.id)
-  message.success('已停用'); loadAll()
+async function toggleMember(m) {
+  const { data } = await api.post(`/members/${m.id}/toggle-active`)
+  message.success(data.isActive ? '已启用' : '已停用'); loadAll()
 }
 
 // 字典
@@ -84,7 +89,7 @@ const memberColumns = [
   { title: '状态', key: 'isActive', width: 90, render: (r) => h(NTag, { size: 'small', type: r.isActive ? 'success' : 'default', bordered: false }, () => r.isActive ? '在职' : '已停用') },
   ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('pencil', 'green', '编辑', () => openMember(r)),
-    ...(r.isActive ? [iconBtn('power', 'orange', '停用', () => deactivateMember(r))] : [])
+    iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleMember(r))
   ]) }] : [])
 ]
 const userColumns = [
@@ -134,13 +139,33 @@ const userColumns = [
       <n-data-table :columns="userColumns" :data="users" :bordered="false" />
     </div>
 
-    <n-modal v-model:show="showMember" preset="card" :title="mf.id ? '编辑成员' : '新增成员'" style="width:440px;border-radius:16px">
+    <n-modal v-model:show="showMember" preset="card" :title="mf.id ? '编辑成员' : '新增成员'" style="width:560px;border-radius:16px">
       <n-form label-placement="top">
         <n-form-item label="姓名"><n-input v-model:value="mf.name" /></n-form-item>
         <n-grid :cols="2" :x-gap="12">
-          <n-form-item-gi label="性别"><n-select v-model:value="mf.gender" :options="[{label:'男',value:'M'},{label:'女',value:'F'}]" /></n-form-item-gi>
+          <n-form-item-gi label="性别"><n-select v-model:value="mf.gender" :options="[{label:'男',value:'M'},{label:'女',value:'F'}]" @update:value="(v) => { avatarTab = v }" /></n-form-item-gi>
           <n-form-item-gi label="排序"><n-input-number v-model:value="mf.sort" style="width:100%" /></n-form-item-gi>
         </n-grid>
+        <n-form-item label="头像">
+          <div style="width:100%">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <img :src="avatarFor({ id: mf.id ?? 0, gender: mf.gender, avatarPath: mf.avatarPath })" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--line-soft)" />
+              <div>
+                <div class="small">{{ mf.avatarPath ? '已选择预设头像' : '默认头像（按名单顺序自动分配）' }}</div>
+                <n-button size="tiny" quaternary @click="mf.avatarPath = null">恢复默认</n-button>
+              </div>
+              <div style="flex:1"></div>
+              <n-tabs v-model:value="avatarTab" type="segment" size="small" style="width:150px">
+                <n-tab name="M">男</n-tab>
+                <n-tab name="F">女</n-tab>
+              </n-tabs>
+            </div>
+            <div class="avatar-grid">
+              <img v-for="url in AVATAR_PRESETS[avatarTab]" :key="url" :src="url" loading="lazy"
+                :class="{ on: mf.avatarPath === url }" @click="mf.avatarPath = url" />
+            </div>
+          </div>
+        </n-form-item>
         <n-form-item label="电话"><n-input v-model:value="mf.phone" /></n-form-item>
         <n-form-item label="部门"><n-select v-model:value="mf.department" :options="DEPARTMENTS.map(t => ({ label: t, value: t }))" /></n-form-item>
         <n-form-item label="备注"><n-input v-model:value="mf.remark" placeholder="如：外聘专家 / 兼职配合等" /></n-form-item>
@@ -175,3 +200,10 @@ const userColumns = [
     </n-modal>
   </div>
 </template>
+
+<style scoped>
+.avatar-grid { display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 8px; max-height: 168px; overflow-y: auto; padding: 2px; }
+.avatar-grid img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: transform .1s; }
+.avatar-grid img:hover { transform: scale(1.08); }
+.avatar-grid img.on { border-color: var(--pri); box-shadow: 0 0 0 3px rgba(24, 97, 64, .18); }
+</style>

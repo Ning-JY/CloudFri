@@ -14,7 +14,7 @@ public class MembersController : ControllerBase
     private readonly AppDbContext _db;
     public MembersController(AppDbContext db) => _db = db;
 
-    public record MemberReq(string Name, string Gender, string? Phone, int Sort, string? Department = null, string? Remark = null);
+    public record MemberReq(string Name, string Gender, string? Phone, int Sort, string? Department = null, string? Remark = null, string? AvatarPath = null);
 
     [HttpGet]
     public async Task<IActionResult> List(bool includeInactive = false)
@@ -31,7 +31,7 @@ public class MembersController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(MemberReq req)
     {
-        var m = new Member { Name = req.Name, Gender = req.Gender, Phone = req.Phone, Sort = req.Sort, Department = req.Department, Remark = req.Remark };
+        var m = new Member { Name = req.Name, Gender = req.Gender, Phone = req.Phone, Sort = req.Sort, Department = req.Department, Remark = req.Remark, AvatarPath = string.IsNullOrWhiteSpace(req.AvatarPath) ? null : req.AvatarPath };
         _db.Members.Add(m);
         await _db.SaveChangesAsync();
         return Ok(new { m.Id });
@@ -45,8 +45,21 @@ public class MembersController : ControllerBase
         if (m == null) return NotFound();
         m.Name = req.Name; m.Gender = req.Gender; m.Phone = req.Phone; m.Sort = req.Sort;
         m.Department = req.Department; m.Remark = req.Remark;
+        m.AvatarPath = string.IsNullOrWhiteSpace(req.AvatarPath) ? null : req.AvatarPath;
         await _db.SaveChangesAsync();
         return Ok(new { m.Id });
+    }
+
+    /// <summary>停用/启用切换（停用后可再启用，成员名单一直可见）。</summary>
+    [Authorize(Roles = "Admin")]
+    [HttpPost("{id:int}/toggle-active")]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var m = await _db.Members.FindAsync(id);
+        if (m == null) return NotFound();
+        m.IsActive = !m.IsActive;
+        await _db.SaveChangesAsync();
+        return Ok(new { m.Id, m.IsActive });
     }
 
     [Authorize(Roles = "Admin")]

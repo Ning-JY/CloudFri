@@ -54,15 +54,15 @@ public class ProjectsController : ControllerBase
                           join m in _db.Members on pm.MemberId equals m.Id
                           where pm.ProjectId == id
                           orderby pm.Share descending
-                          select new { pm.Id, pm.MemberId, m.Name, m.Gender, pm.Role, pm.Duty, pm.Share }).ToListAsync();
+                          select new { pm.Id, pm.MemberId, m.Name, m.Gender, m.AvatarPath, pm.Role, pm.Duty, pm.Share }).ToListAsync();
 
         // 参与人员为空时默认展示项目负责人：角色「项目负责人」、职责「整体项目管理」（在「编辑分工」里保存后落库）
         object teamOut = team;
         if (team.Count == 0 && p.OwnerMemberId is int ownerId)
         {
-            var om = await _db.Members.Where(m => m.Id == ownerId).Select(m => new { m.Name, m.Gender }).FirstOrDefaultAsync();
+            var om = await _db.Members.Where(m => m.Id == ownerId).Select(m => new { m.Name, m.Gender, m.AvatarPath }).FirstOrDefaultAsync();
             if (om != null)
-                teamOut = new[] { new { Id = 0, MemberId = ownerId, om.Name, om.Gender, Role = "项目负责人", Duty = (string?)"整体项目管理", Share = 100m } };
+                teamOut = new[] { new { Id = 0, MemberId = ownerId, om.Name, om.Gender, om.AvatarPath, Role = "项目负责人", Duty = (string?)"整体项目管理", Share = 100m } };
         }
 
         var contracts = await (from pc in _db.ProjectContracts
