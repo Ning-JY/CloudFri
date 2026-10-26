@@ -20,6 +20,9 @@ public class Member
     public string Name { get; set; } = "";
     public string Gender { get; set; } = "M";
     public string? Phone { get; set; }
+    /// <summary>部门（当前取值：工程咨询事业部 / 协作人员）。</summary>
+    public string? Department { get; set; }
+    public string? Remark { get; set; }
     public string? AvatarPath { get; set; }
     public bool IsActive { get; set; } = true;
     public int Sort { get; set; }
@@ -90,11 +93,12 @@ public class ProjectContract
     public bool IsPrimary { get; set; }
 }
 
-/// <summary>收款记录。Amount 单位：万元。</summary>
+/// <summary>收款记录。Amount 单位：万元。ContractId 为收款所属合同（可空，未指定合同时为空），支持按项目/按合同两个维度查看。</summary>
 public class Receipt
 {
     public int Id { get; set; }
     public int ProjectId { get; set; }
+    public int? ContractId { get; set; }
     public DateOnly Date { get; set; }
     public decimal Amount { get; set; }
     public string? Method { get; set; }
@@ -121,12 +125,13 @@ public class ProjectFile
     public DateTime UploadedAt { get; set; } = DateTime.Now;
 }
 
-/// <summary>成果整体版本：一次交付 = 一个版本（软件版+文档版+报告）。</summary>
+/// <summary>成果整体版本：一次交付 = 一个版本（软件版+文档版+报告）。IsFinal 为「设为最终版」标记：被标记的历史版本重新成为当前版本（承接后续上传），无标记时当前版本为版本号最大者。</summary>
 public class DeliverableSet
 {
     public int Id { get; set; }
     public int ProjectId { get; set; }
     public int Version { get; set; } = 1;
+    public bool IsFinal { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string? CreatedBy { get; set; }
 }
@@ -144,7 +149,7 @@ public class ProjectDoc
     public DateTime UploadedAt { get; set; } = DateTime.Now;
 }
 
-/// <summary>GCFX 解析结果（一期：字符串级可提取字段 + 单位工程构成 JSON）。金额单位：元。</summary>
+/// <summary>GCFX 解析结果（工程信息字符串级提取 + 单位工程构成 JSON + 清单明细 JSON）。金额单位：元。ItemsJson 为逐行提取的清单明细（编码/名称/单位/工程量）；综合单价与合价的二进制字段尚未可靠提取，不在此列。</summary>
 public class GcfxParse
 {
     public int Id { get; set; }
@@ -155,6 +160,7 @@ public class GcfxParse
     public string? Basis { get; set; }
     public string? Region { get; set; }
     public string? UnitsJson { get; set; }
+    public string? ItemsJson { get; set; }
     public string? Note { get; set; }
     public DateTime ParsedAt { get; set; } = DateTime.Now;
 }

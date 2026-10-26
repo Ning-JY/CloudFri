@@ -46,6 +46,45 @@ public class ContractsController : ControllerBase
         return Ok(rows);
     }
 
+    /// <summary>合同详情：基本信息 + 附件 + 全部关联项目 + 该合同名下的收款（Receipt.ContractId 标记）。</summary>
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> Detail(int id)
+    {
+        var c = await _db.Contracts.FindAsync(id);
+        if (c == null) return NotFound();
+
+        var files = await _db.ContractFiles.Where(f => f.ContractId == id)
+            .OrderByDescending(f => f.UploadedAt)
+            .Select(f => new { f.Id, f.FileName, f.SizeBytes, f.UploadedBy, f.UploadedAt }).ToListAsync();
+
+        var projects = await (from pc in _db.ProjectContracts
+                              join p in _db.Projects on pc.ProjectId equals p.Id
+                              where pc.ContractId == id
+                              orderby pc.IsPrimary descending
+                              select new
+                              {
+                                  p.Id, p.Code, p.Name, p.Client, p.BizType, p.Status, p.Fee,
+                                  pc.IsPrimary,
+                                  ReceivedTotal = _db.Receipts.Where(r => r.ProjectId == p.Id).Sum(r => (decimal?)r.Amount) ?? 0,
+                                  ContractReceived = _db.Receipts.Where(r => r.ProjectId == p.Id && r.ContractId == id).Sum(r => (decimal?)r.Amount) ?? 0
+                              }).ToListAsync();
+
+        var receipts = await (from r in _db.Receipts
+                              join p in _db.Projects on r.ProjectId equals p.Id
+                              where r.ContractId == id
+                              orderby r.Date
+                              select new { r.Id, r.ProjectId, ProjectCode = p.Code, ProjectName = p.Name, r.Date, r.Amount, r.Method, r.Handler, r.Note }).ToListAsync();
+
+        return Ok(new
+        {
+            Contract = new { c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status, c.CreatedAt },
+            Files = files,
+            Projects = projects,
+            Receipts = receipts,
+            ReceivedTotal = receipts.Sum(r => r.Amount)
+        });
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create(ContractReq req)
     {
@@ -186,5 +225,31 @@ public class FeesController : ControllerBase
             ProjectCount = rows.Count
         };
         return Ok(new { rows, totals });
+    }
+
+    /// <summary>收款明细多维查看：可按项目、按合同筛选，或按项目名/合同号搜索。</summary>
+    [HttpGet("receipts")]
+    public async Task<IActionResult> Receipts(int? projectId = null, int? contractId = null, string? q = null)
+    {
+        var query = from r in _db.Receipts
+                    join p in _db.Projects on r.ProjectId equals p.Id
+                    join c in _db.Contracts on r.ContractId equals c.Id into gj
+                    from c in gj.DefaultIfEmpty()
+                    select new { r, p, c };
+        if (projectId != null) query = query.Where(x => x.r.ProjectId == projectId.Value);
+        if (contractId != null) query = query.Where(x => x.r.ContractId == contractId.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(x => x.p.Name.Contains(q) || x.p.Code.Contains(q)
+                || (x.c != null && (x.c.No.Contains(q) || x.c.Name.Contains(q))));
+        var rows = await query.OrderByDescending(x => x.r.Date).ThenByDescending(x => x.r.Id)
+            .Select(x => new
+            {
+                x.r.Id, x.r.Date, x.r.Amount, x.r.Method, x.r.Handler, x.r.Note,
+                x.r.ProjectId, ProjectCode = x.p.Code, ProjectName = x.p.Name,
+                x.r.ContractId,
+                ContractNo = x.c != null ? x.c.No : null,
+                ContractName = x.c != null ? x.c.Name : null
+            }).ToListAsync();
+        return Ok(new { rows, total = rows.Sum(x => x.Amount), count = rows.Count });
     }
 }

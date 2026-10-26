@@ -9,27 +9,71 @@ const router = useRouter()
 const message = useMessage()
 const rows = ref([])
 const totals = ref({ feeTotal: 0, receivedTotal: 0, projectCount: 0 })
+const allContracts = ref([])
 
 async function load() {
   const { data } = await api.get('/fees')
   rows.value = data.rows
   totals.value = data.totals
+  loadReceipts()
 }
-onMounted(load)
+onMounted(async () => {
+  const { data } = await api.get('/contracts')
+  allContracts.value = data
+  load()
+})
 
-// 新增回款（直接在本页登记，不必进项目详情）
+// 收款明细多维查看：按项目 / 按合同 / 关键词筛选
+const recRows = ref([])
+const recTotal = ref(0)
+const recCount = ref(0)
+const fProject = ref(null)
+const fContract = ref(null)
+const fQ = ref('')
+async function loadReceipts() {
+  const params = {}
+  if (fProject.value) params.projectId = fProject.value
+  if (fContract.value) params.contractId = fContract.value
+  if (fQ.value) params.q = fQ.value
+  const { data } = await api.get('/fees/receipts', { params })
+  recRows.value = data.rows
+  recTotal.value = data.total
+  recCount.value = data.count
+}
+const recColumns = [
+  { title: '收款日期', key: 'date', width: 110 },
+  { title: '项目', key: 'projectName', ellipsis: { tooltip: true }, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
+  { title: '所属合同', key: 'contractNo', width: 140, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
+  { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
+  { title: '方式', key: 'method', width: 100 },
+  { title: '经办人', key: 'handler', width: 90 },
+  { title: '备注', key: 'note', ellipsis: { tooltip: true } }
+]
+
+// 新增回款（直接在本页登记，不必进项目详情；选项目后可指定该项目关联的合同）
 const showAdd = ref(false)
-const rf = ref({ projectId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' })
+const rf = ref({ projectId: null, contractId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' })
+const rfContracts = ref([])
 function openAdd() {
-  rf.value = { projectId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' }
+  rf.value = { projectId: null, contractId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' }
+  rfContracts.value = []
   showAdd.value = true
+}
+async function onRfProject(pid) {
+  rf.value.contractId = null
+  rfContracts.value = []
+  if (!pid) return
+  try {
+    const { data } = await api.get('/projects/' + pid)
+    rfContracts.value = data.contracts || []
+  } catch { /* 拉不到合同时不阻塞登记 */ }
 }
 async function addReceipt() {
   if (!rf.value.projectId) { message.warning('请选择项目'); return }
   if (!rf.value.date || !rf.value.amount) { message.warning('请填写日期和金额'); return }
   try {
     await api.post(`/projects/${rf.value.projectId}/receipts`, {
-      date: rf.value.date, amount: rf.value.amount, method: rf.value.method, handler: rf.value.handler, note: rf.value.note
+      date: rf.value.date, amount: rf.value.amount, method: rf.value.method, handler: rf.value.handler, note: rf.value.note, contractId: rf.value.contractId
     })
     message.success('回款已登记')
     showAdd.value = false
@@ -80,10 +124,29 @@ const columns = [
       <p class="small faint" style="padding:6px 10px">点右上角「新增回款」直接登记；点击任意行进入项目详情查看收款记录。</p>
     </div>
 
+    <div class="card" style="padding:14px 18px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <b style="font-size:14.5px">收款明细</b>
+        <span class="small faint">按项目、按合同两个维度查看每一笔收款</span>
+        <div style="flex:1"></div>
+        <n-select v-model:value="fProject" clearable filterable :options="rows.map(r => ({ label: r.code + ' · ' + r.name, value: r.id }))" placeholder="全部项目" style="width:230px" @update:value="loadReceipts" />
+        <n-select v-model:value="fContract" clearable filterable :options="allContracts.map(c => ({ label: c.no + ' · ' + c.name, value: c.id }))" placeholder="全部合同" style="width:230px" @update:value="loadReceipts" />
+        <n-input v-model:value="fQ" placeholder="搜索项目 / 合同" style="width:180px" clearable @update:value="loadReceipts" />
+      </div>
+      <div class="small mut" style="margin-top:8px">当前筛选：{{ recCount }} 笔 · 合计 <b class="num">{{ fmt(recTotal) }}</b> 万元</div>
+    </div>
+    <div class="card" style="padding:6px 10px">
+      <n-data-table :columns="recColumns" :data="recRows" :bordered="false" :scroll-x="900" />
+      <div v-if="!recRows.length" class="faint" style="text-align:center;padding:26px">暂无符合条件的收款</div>
+    </div>
+
     <n-modal v-model:show="showAdd" preset="card" title="新增回款" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
         <n-form-item label="项目">
-          <n-select v-model:value="rf.projectId" filterable :options="rows.map(r => ({ label: r.code + ' · ' + r.name, value: r.id }))" placeholder="选择项目" />
+          <n-select v-model:value="rf.projectId" filterable :options="rows.map(r => ({ label: r.code + ' · ' + r.name, value: r.id }))" placeholder="选择项目" @update:value="onRfProject" />
+        </n-form-item>
+        <n-form-item label="所属合同（可选）">
+          <n-select v-model:value="rf.contractId" clearable :options="rfContracts.map(c => ({ label: c.no + ' · ' + c.name, value: c.id }))" :placeholder="rf.projectId ? '未指定合同' : '先选择项目'" />
         </n-form-item>
         <n-form-item label="回款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
         <n-form-item label="金额（万元）"><n-input-number v-model:value="rf.amount" :min="0" style="width:100%" /></n-form-item>

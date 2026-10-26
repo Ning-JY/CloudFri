@@ -13,7 +13,10 @@ namespace CloudFri.Api.Services;
 /// </summary>
 public static class GcfxService
 {
-    public record GcfxResult(string? ProjectName, decimal? TotalAmount, string? AmountCn, string? Basis, string? Region, List<string> Units);
+    public record GcfxResult(string? ProjectName, decimal? TotalAmount, string? AmountCn, string? Basis, string? Region, List<string> Units, List<GcfxItem> Items);
+
+    /// <summary>清单明细一行：单位工程 / 清单编码 / 名称 / 计量单位 / 工程量（逐行提取自 0/{单位}/3003 记录；综合单价与合价未提取）。</summary>
+    public record GcfxItem(string Unit, string Code, string Name, string UnitName, decimal? Qty);
 
     public static GcfxResult Parse(string filePath)
     {
@@ -82,7 +85,153 @@ public static class GcfxService
             units = unitPool.Where(s => counts[s] >= 4)
                 .OrderByDescending(s => counts[s]).Take(20).ToList();
 
-        return new GcfxResult(projectName, total, amountCn, basis, region, units);
+        var items = ExtractItems(filePath);
+        return new GcfxResult(projectName, total, amountCn, basis, region, units, items);
+    }
+
+    // ---------- 清单明细逐行提取 ----------
+    // GCFX 内部结构：0/Tree 为工程树节点表（节点名 UTF-16LE 串，串起始前 29 字节处 UInt16 为节点号，
+    // 与数据目录号一致，如 0/4/3003）；0/{节点号}/3003 为该单位工程的分部分项记录：
+    // 每条清单 = 12 位编码 + 9 位基本编码 + 名称 + 单位 的字符串序列，工程量为编码前最近的数字串。
+    // 单位工程名按工程树顺序与目录号对应，标签取「单项工程 · 单位工程」（如 仓库 · 电力工程）。
+
+    private static bool IsCjk(ushort v) => v is >= 0x4E00 and <= 0x9FA5;
+
+    private static List<GcfxItem> ExtractItems(string filePath)
+    {
+        var items = new List<GcfxItem>();
+        try
+        {
+            using var zip = ZipFile.OpenRead(filePath);
+            var unitDirs = new SortedSet<int>();
+            foreach (var e in zip.Entries)
+            {
+                var m = Regex.Match(e.FullName, @"^0/(\d+)/3003$");
+                if (m.Success) unitDirs.Add(int.Parse(m.Groups[1].Value));
+            }
+            if (unitDirs.Count == 0) return items;
+
+            var labels = ParseTreeLabels(zip, unitDirs);
+            foreach (var dir in unitDirs)
+            {
+                var entry = zip.GetEntry($"0/{dir}/3003");
+                if (entry == null) continue;
+                using var ms = new MemoryStream();
+                entry.Open().CopyTo(ms);
+                var data = ms.ToArray();
+                var label = labels.TryGetValue(dir, out var lb) ? lb : $"单位工程（目录 {dir}）";
+                items.AddRange(ExtractUnitItems(data, label));
+            }
+        }
+        catch { /* 明细提取失败不影响主解析结果 */ }
+        return items;
+    }
+
+    /// <summary>解析工程树：按字节序扫描节点名（两种字节对齐都要扫），节点号 = 名串起始前 29 字节的 UInt16。</summary>
+    private static Dictionary<int, string> ParseTreeLabels(ZipArchive zip, SortedSet<int> unitDirs)
+    {
+        var labels = new Dictionary<int, string>();
+        var tree = zip.GetEntry("0/Tree");
+        if (tree == null) return labels;
+        using var ms = new MemoryStream();
+        tree.Open().CopyTo(ms);
+        var data = ms.ToArray();
+
+        var nodes = new List<(int Start, int Id, string Name)>();
+        var seen = new HashSet<int>();
+        for (var parity = 0; parity <= 1; parity++)
+        {
+            var i = parity;
+            while (i + 1 < data.Length)
+            {
+                var v = BitConverter.ToUInt16(data, i);
+                if (IsCjk(v))
+                {
+                    var start = i;
+                    var sb = new StringBuilder();
+                    while (i + 1 < data.Length)
+                    {
+                        var ch = BitConverter.ToUInt16(data, i);
+                        if (IsCjk(ch) || ch is 0x3001 or 0xFF08 or 0xFF09) { sb.Append((char)ch); i += 2; }
+                        else break;
+                    }
+                    if (sb.Length >= 2 && seen.Add(start))
+                    {
+                        var id = start >= 29 ? BitConverter.ToUInt16(data, start - 29) : -1;
+                        nodes.Add((start, id, sb.ToString()));
+                    }
+                    continue;
+                }
+                i += 2;
+            }
+        }
+        nodes.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        string? parent = null;
+        foreach (var n in nodes)
+        {
+            if (unitDirs.Contains(n.Id))
+                labels[n.Id] = parent != null ? $"{parent} · {n.Name}" : n.Name;
+            else if (n.Id > 0)
+                parent = n.Name; // 单项工程节点（其目录下无 3003 分部分项数据）
+        }
+        return labels;
+    }
+
+    private static readonly Regex ItemRunRegex = new(@"[\u4e00-\u9fa5A-Za-z0-9\.\-（）()·、，：:；/%]{1,}", RegexOptions.Compiled);
+    private static readonly Regex QtyRegex = new(@"^\d+(\.\d+)?$", RegexOptions.Compiled);
+
+    private static List<GcfxItem> ExtractUnitItems(byte[] data, string label)
+    {
+        var result = new List<GcfxItem>();
+        var i = 0;
+        while (i + 24 <= data.Length)
+        {
+            if (!IsDigitAt(data, i)) { i++; continue; }
+            // 连续 12 个 UTF-16LE 数字字符 = 清单编码
+            var ok = true;
+            for (var k = 0; k < 12; k++)
+                if (!IsDigitAt(data, i + k * 2)) { ok = false; break; }
+            if (!ok) { i++; continue; }
+            var code = Encoding.Unicode.GetString(data, i, 24);
+            var after = Encoding.Unicode.GetString(data, i, Math.Min(400, data.Length - i));
+            var runs = ItemRunRegex.Matches(after).Select(m => m.Value).ToList();
+            if (runs.Count >= 3 && runs[0] == code && runs[1] == code[..9] && runs[2].Length >= 2 && runs[2].Any(c => c is >= '一' and <= '鿿'))
+            {
+                var unitName = runs.Count >= 4 && runs[3].Length <= 16 ? runs[3] : "";
+                var qty = FindQtyBefore(data, i);
+                result.Add(new GcfxItem(label, code, runs[2], unitName, qty));
+                i += 24;
+            }
+            else i++;
+        }
+        return result;
+    }
+
+    private static bool IsDigitAt(byte[] data, int bytePos) =>
+        bytePos + 1 < data.Length && data[bytePos] is >= 0x30 and <= 0x39 && data[bytePos + 1] == 0;
+
+    /// <summary>工程量 = 编码前最近的纯数字串（两种字节对齐都解码，按串的结束位置取最近）。</summary>
+    private static decimal? FindQtyBefore(byte[] data, int codeBytePos)
+    {
+        var start = Math.Max(0, codeBytePos - 800);
+        var len = codeBytePos - start;
+        if (len <= 0) return null;
+        decimal? best = null;
+        var bestEnd = -1;
+        for (var shift = 0; shift <= 1; shift++)
+        {
+            var s = Encoding.Unicode.GetString(data, start + shift, len - shift);
+            foreach (Match m in ItemRunRegex.Matches(s))
+            {
+                var g = m.Value.Trim();
+                if (!QtyRegex.IsMatch(g)) continue;
+                if (!decimal.TryParse(g, out var q) || q <= 0 || q > 100_000_000m) continue;
+                var end = start + shift + (m.Index + m.Length) * 2;
+                if (end > bestEnd) { bestEnd = end; best = q; }
+            }
+        }
+        return best;
     }
 
     private static Dictionary<string, int> ExtractStringCounts(string filePath)

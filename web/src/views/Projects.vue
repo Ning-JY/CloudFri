@@ -1,12 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NTag, NButton, useMessage } from 'naive-ui'
+import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, priceOf, statusType, todayStr } from '../utils'
 
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const rows = ref([])
 const members = ref([])
 const q = ref('')
@@ -55,8 +56,20 @@ const columns = [
   { title: '已收', key: 'received', width: 95, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
   { title: '负责人', key: 'ownerName', width: 86, render: (r) => r.ownerName || '—' },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
-  { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') }
+  { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') },
+  { title: '操作', key: 'act', width: 84, render: (r) => h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: (e) => { e.stopPropagation(); delProject(r) } }, () => '删除') }
 ]
+
+function delProject(r) {
+  dialog.error({
+    title: '删除项目', content: `确定删除项目「${r.name}」（${r.code}）？其团队分工、合同关联、收款记录、成果文件与项目资料将一并删除，不可恢复。`,
+    positiveText: '删除', negativeText: '取消',
+    onPositiveClick: async () => {
+      try { await api.delete('/projects/' + r.id); message.success('项目已删除'); load() }
+      catch (e) { message.error(errMsg(e)) }
+    }
+  })
+}
 
 // 新建登记（精简版：金额与合同不在登记时填写）
 const showCreate = ref(false)

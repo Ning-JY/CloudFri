@@ -35,6 +35,9 @@ public class FilesController : ControllerBase
     private string CurrentUserName() =>
         User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "";
 
+    private static string ParseNote(int itemCount) =>
+        $"工程信息为字符串级提取（工程树/大写金额/计价依据）；清单明细已逐行提取（编码/名称/单位/工程量，共 {itemCount} 条）；综合单价与合价的二进制字段尚未可靠提取，暂不显示。";
+
     /// <summary>取项目当前成果版本集合；没有则建 V1，并把旧文件（SetId 为空，整体版本功能上线前上传的）归入最早的版本集合。</summary>
     private async Task<DeliverableSet> EnsureCurrentSetAsync(int projectId)
     {
@@ -52,7 +55,20 @@ public class FilesController : ControllerBase
             foreach (var f in legacy) f.SetId = sets[0].Id;
             await _db.SaveChangesAsync();
         }
-        return sets[^1];
+        // 当前版本：被「设为最终版」标记的集合优先，否则取版本号最大者
+        return sets.FirstOrDefault(s => s.IsFinal) ?? sets[^1];
+    }
+
+    /// <summary>把某个历史版本设为最终版：该版本重新成为当前版本（承接后续上传），其余版本转历史。</summary>
+    [HttpPost("sets/{setId:int}/set-final")]
+    public async Task<IActionResult> SetFinal(int projectId, int setId)
+    {
+        var sets = await _db.DeliverableSets.Where(s => s.ProjectId == projectId).ToListAsync();
+        var target = sets.FirstOrDefault(s => s.Id == setId);
+        if (target == null) return NotFound();
+        foreach (var s in sets) s.IsFinal = s.Id == setId;
+        await _db.SaveChangesAsync();
+        return Ok(new { target.Id, target.Version });
     }
 
     /// <summary>新增成果版本：当前版本（软件版/文档版/报告）整体转入历史，开启新版本承接后续上传。</summary>
@@ -63,7 +79,11 @@ public class FilesController : ControllerBase
         var cur = await EnsureCurrentSetAsync(projectId);
         var hasFiles = await _db.ProjectFiles.AnyAsync(f => f.ProjectId == projectId && f.SetId == cur.Id);
         if (!hasFiles) return Ok(new { cur.Version, Created = false });
-        var next = new DeliverableSet { ProjectId = projectId, Version = cur.Version + 1, CreatedBy = CurrentUserName() };
+        // 新版本成为当前版本：清除既有「最终版」标记
+        var marked = await _db.DeliverableSets.Where(s => s.ProjectId == projectId && s.IsFinal).ToListAsync();
+        foreach (var s in marked) s.IsFinal = false;
+        var maxVersion = await _db.DeliverableSets.Where(s => s.ProjectId == projectId).MaxAsync(s => s.Version);
+        var next = new DeliverableSet { ProjectId = projectId, Version = maxVersion + 1, CreatedBy = CurrentUserName() };
         _db.DeliverableSets.Add(next);
         await _db.SaveChangesAsync();
         return Ok(new { next.Version, Created = true });
@@ -106,7 +126,8 @@ public class FilesController : ControllerBase
                     AmountCn = r.AmountCn,
                     Basis = r.Basis, Region = r.Region,
                     UnitsJson = JsonSerializer.Serialize(r.Units),
-                    Note = "字符串级提取（工程树/大写金额/计价依据）；逐行结构化解析为二期项。"
+                    ItemsJson = JsonSerializer.Serialize(r.Items),
+                    Note = ParseNote(r.Items.Count)
                 };
                 _db.GcfxParses.Add(parse);
                 await _db.SaveChangesAsync();
@@ -177,7 +198,8 @@ public class FilesController : ControllerBase
         parse.Basis = r.Basis;
         parse.Region = r.Region;
         parse.UnitsJson = JsonSerializer.Serialize(r.Units);
-        parse.Note = "字符串级提取（工程树/大写金额/计价依据）；逐行结构化解析为二期项。";
+        parse.ItemsJson = JsonSerializer.Serialize(r.Items);
+        parse.Note = ParseNote(r.Items.Count);
         parse.ParsedAt = DateTime.Now;
         await _db.SaveChangesAsync();
         string? filledField = null;

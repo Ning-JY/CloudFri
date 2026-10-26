@@ -78,9 +78,17 @@ public class ProjectsController : ControllerBase
                                        .Select(f => new { f.Id, f.FileName, f.SizeBytes, f.UploadedAt }).ToList()
                                }).ToListAsync();
 
-        var receipts = await _db.Receipts.Where(r => r.ProjectId == id)
-            .OrderBy(r => r.Date)
-            .Select(r => new { r.Id, r.Date, r.Amount, r.Method, r.Handler, r.Note }).ToListAsync();
+        var receipts = await (from r in _db.Receipts
+                              where r.ProjectId == id
+                              orderby r.Date
+                              join c in _db.Contracts on r.ContractId equals c.Id into gj
+                              from c in gj.DefaultIfEmpty()
+                              select new
+                              {
+                                  r.Id, r.Date, r.Amount, r.Method, r.Handler, r.Note, r.ContractId,
+                                  ContractNo = c != null ? c.No : null,
+                                  ContractName = c != null ? c.Name : null
+                              }).ToListAsync();
 
         var files = await _db.ProjectFiles.Where(f => f.ProjectId == id)
             .OrderBy(f => f.Category).ThenByDescending(f => f.Version)
@@ -88,7 +96,7 @@ public class ProjectsController : ControllerBase
 
         var sets = await _db.DeliverableSets.Where(s => s.ProjectId == id)
             .OrderBy(s => s.Version)
-            .Select(s => new { s.Id, s.Version, s.CreatedAt }).ToListAsync();
+            .Select(s => new { s.Id, s.Version, s.IsFinal, s.CreatedAt }).ToListAsync();
 
         var docs = await _db.ProjectDocs.Where(d => d.ProjectId == id)
             .OrderBy(d => d.Category).ThenByDescending(d => d.UploadedAt)
@@ -99,7 +107,7 @@ public class ProjectsController : ControllerBase
 
         var gcfxFileIds = files.Select(f => f.Id).ToList();
         var parses = await _db.GcfxParses.Where(g => gcfxFileIds.Contains(g.ProjectFileId))
-            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.Note, g.ParsedAt })
+            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.ItemsJson, g.Note, g.ParsedAt })
             .ToListAsync();
 
         return Ok(new
@@ -165,15 +173,26 @@ public class ProjectsController : ControllerBase
     {
         var p = await _db.Projects.FindAsync(id);
         if (p == null) return NotFound();
+        var files = await _db.ProjectFiles.Where(x => x.ProjectId == id).ToListAsync();
+        var docs = await _db.ProjectDocs.Where(x => x.ProjectId == id).ToListAsync();
+        var fileIds = files.Select(f => f.Id).ToList();
+        _db.GcfxParses.RemoveRange(_db.GcfxParses.Where(g => fileIds.Contains(g.ProjectFileId)));
         _db.ProjectMembers.RemoveRange(_db.ProjectMembers.Where(x => x.ProjectId == id));
         _db.ProjectContracts.RemoveRange(_db.ProjectContracts.Where(x => x.ProjectId == id));
         _db.Receipts.RemoveRange(_db.Receipts.Where(x => x.ProjectId == id));
-        _db.ProjectFiles.RemoveRange(_db.ProjectFiles.Where(x => x.ProjectId == id));
+        _db.ProjectFiles.RemoveRange(files);
         _db.DeliverableSets.RemoveRange(_db.DeliverableSets.Where(x => x.ProjectId == id));
-        _db.ProjectDocs.RemoveRange(_db.ProjectDocs.Where(x => x.ProjectId == id));
+        _db.ProjectDocs.RemoveRange(docs);
         _db.Projects.Remove(p);
         await _db.SaveChangesAsync();
+        foreach (var f in files) TryDeletePhysical(f.StoredPath);
+        foreach (var d in docs) TryDeletePhysical(d.StoredPath);
         return Ok(new { p.Id });
+    }
+
+    private static void TryDeletePhysical(string path)
+    {
+        try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); } catch { }
     }
 
     /// <summary>整体替换项目团队（角色 + 职责 + 占比）。</summary>
@@ -197,13 +216,15 @@ public class ReceiptsController : ControllerBase
     private readonly AppDbContext _db;
     public ReceiptsController(AppDbContext db) => _db = db;
 
-    public record ReceiptReq(DateOnly Date, decimal Amount, string? Method, string? Handler, string? Note);
+    public record ReceiptReq(DateOnly Date, decimal Amount, string? Method, string? Handler, string? Note, int? ContractId = null);
 
     [HttpPost]
     public async Task<IActionResult> Create(int projectId, ReceiptReq req)
     {
         if (!await _db.Projects.AnyAsync(x => x.Id == projectId)) return NotFound();
-        var r = new Receipt { ProjectId = projectId, Date = req.Date, Amount = req.Amount, Method = req.Method, Handler = req.Handler, Note = req.Note };
+        if (req.ContractId is int cid && !await _db.Contracts.AnyAsync(x => x.Id == cid))
+            return BadRequest(new { message = "所选合同不存在" });
+        var r = new Receipt { ProjectId = projectId, ContractId = req.ContractId, Date = req.Date, Amount = req.Amount, Method = req.Method, Handler = req.Handler, Note = req.Note };
         _db.Receipts.Add(r);
         await _db.SaveChangesAsync();
         return Ok(new { r.Id });

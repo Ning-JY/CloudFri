@@ -27,7 +27,8 @@ onMounted(loadAll)
 // 成员
 const showMember = ref(false)
 const mf = ref({})
-function openMember(m) { mf.value = m ? { ...m } : { name: '', gender: 'M', phone: '', sort: members.value.length + 1 }; showMember.value = true }
+const DEPARTMENTS = ['工程咨询事业部', '协作人员']
+function openMember(m) { mf.value = m ? { ...m } : { name: '', gender: 'M', phone: '', department: '工程咨询事业部', remark: '', sort: members.value.length + 1 }; showMember.value = true }
 async function saveMember() {
   try {
     if (mf.value.id) await api.put('/members/' + mf.value.id, mf.value)
@@ -78,6 +79,8 @@ const memberColumns = [
   { title: '姓名', key: 'name', render: (r) => h('b', r.name) },
   { title: '性别', key: 'gender', width: 70, render: (r) => r.gender === 'F' ? '女' : '男' },
   { title: '电话', key: 'phone', render: (r) => r.phone || '—' },
+  { title: '部门', key: 'department', width: 130, render: (r) => r.department ? h(NTag, { size: 'small', bordered: false, type: r.department === '协作人员' ? 'warning' : 'info' }, () => r.department) : '—' },
+  { title: '备注', key: 'remark', ellipsis: { tooltip: true }, render: (r) => r.remark || '—' },
   { title: '状态', key: 'isActive', width: 90, render: (r) => h(NTag, { size: 'small', type: r.isActive ? 'success' : 'default', bordered: false }, () => r.isActive ? '在职' : '已停用') },
   ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 150, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
     h(NButton, { size: 'small', onClick: () => openMember(r) }, () => '编辑'),
@@ -139,6 +142,8 @@ const userColumns = [
           <n-form-item-gi label="排序"><n-input-number v-model:value="mf.sort" style="width:100%" /></n-form-item-gi>
         </n-grid>
         <n-form-item label="电话"><n-input v-model:value="mf.phone" /></n-form-item>
+        <n-form-item label="部门"><n-select v-model:value="mf.department" :options="DEPARTMENTS.map(t => ({ label: t, value: t }))" /></n-form-item>
+        <n-form-item label="备注"><n-input v-model:value="mf.remark" placeholder="如：外聘专家 / 兼职配合等" /></n-form-item>
       </n-form>
       <template #footer><div style="display:flex;justify-content:flex-end;gap:10px">
         <n-button @click="showMember = false">取消</n-button><n-button type="primary" @click="saveMember">保存</n-button>

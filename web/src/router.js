@@ -10,6 +10,7 @@ const routes = [
       { path: 'projects', name: 'projects', component: () => import('./views/Projects.vue'), meta: { title: '项目台账' } },
       { path: 'projects/:id', name: 'project-detail', component: () => import('./views/ProjectDetail.vue'), meta: { title: '项目详情' } },
       { path: 'contracts', name: 'contracts', component: () => import('./views/Contracts.vue'), meta: { title: '合同台账' } },
+      { path: 'contracts/:id', name: 'contract-detail', component: () => import('./views/ContractDetail.vue'), meta: { title: '合同详情' } },
       { path: 'fees', name: 'fees', component: () => import('./views/Fees.vue'), meta: { title: '收费台账' } },
       { path: 'forms', name: 'forms', component: () => import('./views/Forms.vue'), meta: { title: '流程模板' } },
       { path: 'library', name: 'library', component: () => import('./views/Library.vue'), meta: { title: '资料库' } },

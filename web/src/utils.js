@@ -49,11 +49,15 @@ export function statusType(status) {
   return { '编制中': 'warning', '审核中': 'info', '已出报告': 'success', '已归档': 'default' }[status] || 'default'
 }
 
-// 文件预览类型（按扩展名）：pdf / img / other
+// 文件预览类型（按扩展名）：pdf / img / docx(Word) / sheet(Excel·CSV) / text(纯文本) / other
+// 注：旧版 .doc / .xls 二进制格式不在 docx/sheet 解析范围内，归 other（下载查看）
 export function fileKind(name) {
   const ext = String(name || '').split('.').pop().toUpperCase()
   if (ext === 'PDF') return 'pdf'
   if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP'].includes(ext)) return 'img'
+  if (ext === 'DOCX') return 'docx'
+  if (['XLSX', 'CSV'].includes(ext)) return 'sheet'
+  if (['TXT', 'LOG', 'MD'].includes(ext)) return 'text'
   return 'other'
 }
 

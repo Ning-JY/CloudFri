@@ -116,6 +116,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("longtext");
 
+                    b.Property<bool>("IsFinal")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<int>("ProjectId")
                         .HasColumnType("int");
 
@@ -245,6 +248,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<string>("Basis")
                         .HasColumnType("longtext");
 
+                    b.Property<string>("ItemsJson")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Note")
                         .HasColumnType("longtext");
 
@@ -323,6 +329,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("Department")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Gender")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -335,6 +344,9 @@ namespace CloudFri.Api.Data.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Phone")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Remark")
                         .HasColumnType("longtext");
 
                     b.Property<int>("Sort")
@@ -575,6 +587,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("ContractId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");

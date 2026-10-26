@@ -116,10 +116,21 @@ body {
 .d-step-line { width: 34px; height: 2px; background: var(--line); margin: 0 9px; border-radius: 2px; }
 .d-step-line.done { background: var(--pri); }
 .d-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
-.d-amounts .a { background: rgba(246, 249, 247, .75); border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 14px; }
+.d-amounts .a { border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; }
 .d-amounts .lb { font-size: 12px; color: var(--sub); margin-bottom: 5px; }
 .d-amounts .vl { font-size: 19px; font-weight: 750; }
 .d-amounts .sb { font-size: 12px; color: var(--faint); margin-top: 3px; }
+/* 金额卡图标：渐变方块 + 白色图形 SVG（与样稿 KPI 卡一致的渐变语言） */
+.d-amounts .a-ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 4px 10px rgba(24, 97, 64, .18); }
+.d-amounts .a-ic svg { width: 21px; height: 21px; }
+.d-amounts .a-ic.t0 { background: linear-gradient(135deg, #35a06a, #186140); }
+.d-amounts .a-ic.t1 { background: linear-gradient(135deg, #7ea2f2, #2f5fd0); }
+.d-amounts .a-ic.t2 { background: linear-gradient(135deg, #f2b25c, #c77414); }
+.d-amounts .a-ic.t3 { background: linear-gradient(135deg, #b39ae8, #6d4fc2); }
+/* 头部卡内返回按钮：图标按钮，位于项目编号之前 */
+.back-ic { width: 38px; height: 38px; flex: 0 0 38px; border: 1px solid var(--line); background: linear-gradient(135deg, #eef5f0, #e2efe7); color: var(--pri-d); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.back-ic:hover { background: linear-gradient(135deg, #e2efe7, #d3e7da); }
+.back-ic svg { width: 21px; height: 21px; }
 @media (max-width: 1100px) { .d-amounts { grid-template-columns: repeat(2, 1fr); } }
 /* 详情页第六版排版：首行两卡（参与人员/合同与收费）按比例分，次行成果/资料与解析并排；图标一律图形 SVG，不用文字字形 */
 .d-top2 { display: grid; grid-template-columns: 1fr 1.3fr; gap: 14px; align-items: start; }
@@ -133,10 +144,10 @@ body {
 .card-ic.b { background: linear-gradient(135deg, #5b83e6, #2f5fd0); }
 .card-ic.o { background: linear-gradient(135deg, #e8a04c, #b96a12); }
 .card-ic.p { background: linear-gradient(135deg, #9a7fe0, #6d4fc2); }
-.d-amounts .a.t0 { background: #e2efe7; }
-.d-amounts .a.t1 { background: #e8effe; }
-.d-amounts .a.t2 { background: #fdeeda; }
-.d-amounts .a.t3 { background: #f0eafd; }
+.d-amounts .a.t0 { background: linear-gradient(135deg, #eef6f1, #ddefe3); }
+.d-amounts .a.t1 { background: linear-gradient(135deg, #f0f4fe, #dde8fd); }
+.d-amounts .a.t2 { background: linear-gradient(135deg, #fdf6ec, #fbe8cd); }
+.d-amounts .a.t3 { background: linear-gradient(135deg, #f6f2fd, #e9e1fa); }
 .fring.sm { width: 76px; height: 76px; flex: 0 0 76px; }
 .fring.sm svg { width: 76px; height: 76px; }
 .ftiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

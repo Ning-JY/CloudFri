@@ -14,7 +14,7 @@ public class MembersController : ControllerBase
     private readonly AppDbContext _db;
     public MembersController(AppDbContext db) => _db = db;
 
-    public record MemberReq(string Name, string Gender, string? Phone, int Sort);
+    public record MemberReq(string Name, string Gender, string? Phone, int Sort, string? Department = null, string? Remark = null);
 
     [HttpGet]
     public async Task<IActionResult> List(bool includeInactive = false)
@@ -22,7 +22,7 @@ public class MembersController : ControllerBase
         var q = _db.Members.AsQueryable();
         if (!includeInactive) q = q.Where(x => x.IsActive);
         var rows = await q.OrderBy(x => x.Sort).ThenBy(x => x.Id)
-            .Select(x => new { x.Id, x.Name, x.Gender, x.Phone, x.AvatarPath, x.IsActive, x.Sort })
+            .Select(x => new { x.Id, x.Name, x.Gender, x.Phone, x.Department, x.Remark, x.AvatarPath, x.IsActive, x.Sort })
             .ToListAsync();
         return Ok(rows);
     }
@@ -31,7 +31,7 @@ public class MembersController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(MemberReq req)
     {
-        var m = new Member { Name = req.Name, Gender = req.Gender, Phone = req.Phone, Sort = req.Sort };
+        var m = new Member { Name = req.Name, Gender = req.Gender, Phone = req.Phone, Sort = req.Sort, Department = req.Department, Remark = req.Remark };
         _db.Members.Add(m);
         await _db.SaveChangesAsync();
         return Ok(new { m.Id });
@@ -44,6 +44,7 @@ public class MembersController : ControllerBase
         var m = await _db.Members.FindAsync(id);
         if (m == null) return NotFound();
         m.Name = req.Name; m.Gender = req.Gender; m.Phone = req.Phone; m.Sort = req.Sort;
+        m.Department = req.Department; m.Remark = req.Remark;
         await _db.SaveChangesAsync();
         return Ok(new { m.Id });
     }

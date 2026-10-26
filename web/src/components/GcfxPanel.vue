@@ -11,6 +11,22 @@ const tab = ref('ov')
 const units = computed(() => {
   try { return props.parse?.unitsJson ? JSON.parse(props.parse.unitsJson) : [] } catch { return [] }
 })
+// 清单明细（逐行提取：编码/名称/单位/工程量），按单位工程分组
+const items = computed(() => {
+  try { return props.parse?.itemsJson ? JSON.parse(props.parse.itemsJson) : [] } catch { return [] }
+})
+const itemGroups = computed(() => {
+  const map = new Map()
+  for (const it of items.value) {
+    if (!map.has(it.unit)) map.set(it.unit, [])
+    map.get(it.unit).push(it)
+  }
+  return [...map.entries()].map(([unit, rows]) => ({ unit, rows }))
+})
+function fmtQty(q) {
+  if (q === null || q === undefined) return '—'
+  return Number(q).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+}
 const TABS = [
   { key: 'ov', label: '概览' },
   { key: 'sum', label: '报价汇总' },
@@ -56,10 +72,11 @@ const TABS = [
         { title: '数据来源', key: 'src', width: 180, render: () => '工程树字符串提取' }
       ]" :data="units.map((u, i) => ({ i: i + 1, name: u }))" />
       <div v-if="!units.length" class="faint small" style="padding:10px 0">未提取到单位工程构成</div>
-      <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">勾稽核对</b></div>
+      <div style="display:flex;align-items:center;margin:16px 0 4px"><b style="font-size:13.5px">提取进度</b></div>
       <p class="small mut" style="line-height:1.9;margin:0">
-        勾稽核对（明细合计 = 分部分项 + 单价措施清单行合价之和，与费用汇总逐单位工程比对）需要逐行结构化解析，属于二期解析范围。
-        当前一期已完成：工程名称、总造价（与文件大写金额核对一致）、计价依据、所在地区、单位工程构成的结构化提取与展示。
+        已完成：工程名称、总造价（与文件大写金额核对一致）、计价依据、所在地区、单位工程构成，以及清单明细逐行提取
+        （编码 / 名称 / 单位 / 工程量，共 {{ items.length }} 条，见「分部分项清单」页签）。
+        尚未完成：综合单价与合价在文件内为二进制字段，勾稽核对（明细合价之和与费用汇总比对）需待其可靠提取后进行，当前不显示单价与合价以免误导。
       </p>
     </div>
 
@@ -73,15 +90,25 @@ const TABS = [
       ]" :data="[...units.map((u, i) => ({ i: i + 1, name: u, amt: '—' })), { i: '', name: '工程总造价（归集，与大写金额核对一致）', amt: '¥' + fmtMoney(parse.totalAmount) }]" />
     </div>
 
-    <!-- 二期页签 -->
+    <!-- 分部分项清单：逐行提取（编码/名称/单位/工程量） -->
     <div v-if="tab === 'boq'">
-      <p class="small mut" style="line-height:1.9;margin:10px 0 0">清单逐行数据（编码 / 项目特征 / 工程量 / 综合单价 / 合价）将在二期由解析器逐行提取后按此页呈现；一期先完成工程信息与总造价的结构化提取。</p>
+      <div style="display:flex;align-items:center;margin:10px 0 4px"><b style="font-size:13.5px">分部分项清单</b><span class="small faint" style="margin-left:auto">共 {{ items.length }} 条 · 综合单价/合价为二进制字段，尚未可靠提取，暂不显示</span></div>
+      <div v-if="!items.length" class="faint small" style="padding:10px 0">该文件未提取到清单明细（点右上角「重新解析」可按最新解析器重试）。</div>
+      <div v-for="g in itemGroups" :key="g.unit" style="margin-top:12px">
+        <div style="font-size:13px;font-weight:650;margin-bottom:4px">{{ g.unit }}<span class="small faint" style="font-weight:400"> · {{ g.rows.length }} 条</span></div>
+        <n-data-table size="small" :bordered="false" :max-height="420" :columns="[
+          { title: '清单编码', key: 'code', width: 130, render: (r) => r.code },
+          { title: '名称', key: 'name' },
+          { title: '单位', key: 'unitName', width: 80 },
+          { title: '工程量', key: 'qty', width: 120, align: 'right', render: (r) => fmtQty(r.qty) }
+        ]" :data="g.rows" />
+      </div>
     </div>
     <div v-if="tab === 'mat'">
-      <p class="small mut" style="line-height:1.9;margin:10px 0 0">人工 / 材料 / 机械的消耗量与价格汇总将在二期逐行解析完成后按此页呈现。</p>
+      <p class="small mut" style="line-height:1.9;margin:10px 0 0">人工 / 材料 / 机械的消耗量与价格汇总：相关数据在文件内为定额子目二进制记录，尚未可靠提取，提取完成后按此页呈现。</p>
     </div>
     <div v-if="tab === 'fee'">
-      <p class="small mut" style="line-height:1.9;margin:10px 0 0">各单位工程的费用构成（分部分项 / 措施 / 其他项目 / 规费 / 税金）将在二期逐行解析完成后按此页呈现；当前总造价见「概览」与「报价汇总」。</p>
+      <p class="small mut" style="line-height:1.9;margin:10px 0 0">各单位工程的费用构成（分部分项 / 措施 / 其他项目 / 规费 / 税金）依赖逐行合价提取，尚未完成；当前总造价见「概览」与「报价汇总」，清单行见「分部分项清单」。</p>
     </div>
 
     <!-- 工程信息 -->

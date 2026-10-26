@@ -87,8 +87,9 @@ const amounts = computed(() => {
 })
 
 // 成果文件整体版本：三类文件同属一个版本集合；SetId 为空的旧文件按最早集合（V1）处理
+// 当前版本：被设为最终版的集合优先，否则版本号最大者
 const sets = computed(() => d.value?.deliverableSets || [])
-const currentSet = computed(() => sets.value.length ? sets.value[sets.value.length - 1] : null)
+const currentSet = computed(() => sets.value.length ? (sets.value.find(s => s.isFinal) || sets.value[sets.value.length - 1]) : null)
 const currentVersionNo = computed(() => currentSet.value?.version ?? 1)
 const effSetId = (f) => f.setId ?? (sets.value[0]?.id ?? 0)
 const currentSetKey = computed(() => currentSet.value?.id ?? (sets.value[0]?.id ?? 0))
@@ -107,13 +108,41 @@ const historyGroups = computed(() => {
   const groups = []
   const replaced = fileGroups.value.flatMap(g => g.extra.map(f => ({ ...f, catLabel: g.label })))
   if (replaced.length) groups.push({ key: 'rep', label: `当前版本 V${currentVersionNo.value} · 已替换的旧文件`, files: replaced })
-  const older = [...sets.value].slice(0, -1).reverse()
+  const older = sets.value.filter(s => s.id !== currentSet.value?.id).sort((a, b) => b.version - a.version)
   for (const s of older) {
     const fs = (d.value.files || []).filter(f => effSetId(f) === s.id).map(f => ({ ...f, catLabel: catLabel(f.category) }))
-    if (fs.length) groups.push({ key: 'set' + s.id, label: `历史版本 V${s.version}`, files: fs })
+    if (fs.length) groups.push({ key: 'set' + s.id, setId: s.id, label: `历史版本 V${s.version}`, files: fs })
   }
   return groups
 })
+// 把历史版本设为最终版（重新成为当前版本，承接后续上传）
+function setFinal(hg) {
+  dialog.warning({
+    title: '设为最终版', content: `把「${hg.label}」设为最终版？它将重新成为当前版本，后续上传的成果文件会进入该版本；现在的当前版本转入历史。`,
+    positiveText: '设为最终版', negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await api.post(`/projects/${id}/files/sets/${hg.setId}/set-final`)
+        message.success('已设为最终版')
+        await load()
+      } catch (e) { message.error(errMsg(e)) }
+    }
+  })
+}
+// 删除项目（连同团队、合同关联、收款、成果与资料一并删除，不可恢复）
+function delProject() {
+  dialog.error({
+    title: '删除项目', content: `确定删除项目「${p.value.name}」（${p.value.code}）？其团队分工、合同关联、收款记录、成果文件与项目资料将一并删除，不可恢复。`,
+    positiveText: '删除', negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await api.delete('/projects/' + id)
+        message.success('项目已删除')
+        router.push('/projects')
+      } catch (e) { message.error(errMsg(e)) }
+    }
+  })
+}
 const parseOf = (fileId) => (d.value?.gcfxParses || []).find(g => g.projectFileId === fileId)
 // 造价解析卡片展示对象：优先当前版本软件版文件的解析，否则取最近一次解析
 const gcfxTarget = computed(() => {
@@ -289,11 +318,11 @@ async function unlink(contractId) {
   await load()
 }
 
-// 新增回款（与收费台账的弹窗保持一致：日期默认今天，字段相同）
+// 新增回款（与收费台账的弹窗保持一致：日期默认今天，字段相同；可指定所属合同）
 const showReceipt = ref(false)
-const rf = ref({ date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' })
+const rf = ref({ date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null })
 function openReceipt() {
-  rf.value = { date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' }
+  rf.value = { date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null }
   showReceipt.value = true
 }
 async function addReceipt() {
@@ -314,6 +343,7 @@ async function delReceipt(rid) {
 const receiptColumns = [
   { title: '收款日期', key: 'date', width: 110 },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
+  { title: '所属合同', key: 'contractNo', width: 130, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
   { title: '方式', key: 'method', width: 100 },
   { title: '经办人', key: 'handler', width: 90 },
   { title: '备注', key: 'note' },
@@ -323,16 +353,12 @@ const receiptColumns = [
 
 <template>
   <div v-if="p">
-    <div style="margin-bottom:10px">
-      <n-button size="small" @click="goBack">
-        <span style="display:inline-flex;align-items:center;gap:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>返回台账</span>
-      </n-button>
-    </div>
     <!-- 头部 -->
     <div class="card d-head">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
+            <button class="back-ic" @click="goBack" title="返回台账"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
             <span class="num faint">{{ p.code }}</span>
             <n-tag size="small" :type="p.status === '已归档' ? 'default' : p.status === '已出报告' ? 'success' : 'warning'" :bordered="false">{{ p.status }}</n-tag>
             <n-tag size="small" :bordered="false">{{ p.bizType }}</n-tag>
@@ -342,8 +368,8 @@ const receiptColumns = [
           <div class="small mut" style="margin-top:6px">{{ p.client }}<span v-if="p.contactName"> · 联系人 {{ p.contactName }}<span v-if="p.contactPhone"> {{ p.contactPhone }}</span></span> · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}</div>
         </div>
         <n-button @click="openEdit">编辑项目</n-button>
-        <n-dropdown :options="statusOptions" @select="changeStatus"><n-button>更改状态</n-button></n-dropdown>
-        <n-button type="primary" @click="openReceipt">登记收款</n-button>
+        <n-dropdown :options="statusOptions" @select="changeStatus"><n-button type="primary">更改状态</n-button></n-dropdown>
+        <n-button type="error" ghost @click="delProject">删除项目</n-button>
       </div>
       <div class="d-steps">
         <template v-for="(s, i) in STATUSES" :key="s">
@@ -355,7 +381,13 @@ const receiptColumns = [
       </div>
       <div class="d-amounts">
         <div class="a" :class="'t' + (i % 4)" v-for="(a, i) in amounts" :key="a.lb">
-          <div class="lb">{{ a.lb }}</div><div class="vl num">{{ a.vl }}</div><div class="sb">{{ a.sb }}</div>
+          <span class="a-ic" :class="'t' + (i % 4)">
+            <svg v-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="11"/><polyline points="8.5 14.5 12 11 15.5 14.5"/></svg>
+            <svg v-else-if="i === 1" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <svg v-else-if="i === 2" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+          </span>
+          <div style="flex:1;min-width:0"><div class="lb">{{ a.lb }}</div><div class="vl num">{{ a.vl }}</div><div class="sb">{{ a.sb }}</div></div>
         </div>
       </div>
     </div>
@@ -435,7 +467,7 @@ const receiptColumns = [
       <div style="display:flex;flex-direction:column;min-width:0">
         <div class="card">
           <div class="card-h"><span class="card-ic g"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span><h3>成果文件</h3><div class="sp"></div>
-            <n-tag size="small" type="success" :bordered="false">当前版本 V{{ currentVersionNo }}</n-tag>
+            <n-tag size="small" type="success" :bordered="false">{{ currentSet?.isFinal ? '最终版' : '当前版本' }} V{{ currentVersionNo }}</n-tag>
             <n-tag v-if="gotCount === 3" type="success" size="small" :bordered="false">已集齐 3/3</n-tag>
             <n-tag v-else type="warning" size="small" :bordered="false">已传 {{ gotCount }}/3</n-tag>
             <n-button size="small" type="primary" @click="newVersion">+ 新增版本</n-button>
@@ -469,6 +501,7 @@ const receiptColumns = [
             <div v-for="hg in historyGroups" :key="hg.key" style="margin-bottom:2px">
               <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0" @click="toggleHist(hg.key)">
                 <span class="small mut">{{ hg.label }}（{{ hg.files.length }}）</span>
+                <n-button v-if="hg.setId" size="tiny" type="primary" ghost @click.stop="setFinal(hg)">设为最终版</n-button>
                 <span class="faint" style="margin-left:auto">{{ histOpen[hg.key] ? '▾ 收起' : '▸ 展开' }}</span>
               </div>
               <div v-if="histOpen[hg.key]">
@@ -599,6 +632,9 @@ const receiptColumns = [
       <n-form label-placement="top">
         <n-form-item label="回款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
         <n-form-item label="金额（万元）"><n-input-number v-model:value="rf.amount" :min="0" style="width:100%" /></n-form-item>
+        <n-form-item label="所属合同（可选）">
+          <n-select v-model:value="rf.contractId" clearable :options="d.contracts.map(c => ({ label: c.no + ' · ' + c.name, value: c.id }))" placeholder="未指定合同" />
+        </n-form-item>
         <n-grid :cols="2" :x-gap="12">
           <n-form-item-gi label="方式"><n-select v-model:value="rf.method" :options="['银行转账', '现金', '承兑汇票', '其他'].map(t => ({ label: t, value: t }))" /></n-form-item-gi>
           <n-form-item-gi label="经办人"><n-input v-model:value="rf.handler" /></n-form-item-gi>

@@ -79,18 +79,22 @@ async function loadFiles() {
   const { data } = await api.get(`/contracts/${filesContract.value.id}/files`)
   files.value = data
 }
-function pickFile(cb) {
+function pickFile(cb, multiple = false) {
   const inp = document.createElement('input')
   inp.type = 'file'
-  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]) }
+  if (multiple) inp.multiple = true
+  inp.onchange = () => { if (inp.files.length) cb(multiple ? [...inp.files] : inp.files[0]) }
   inp.click()
 }
 async function uploadContractFile(file) {
   const fd = new FormData()
   fd.append('file', file)
+  await api.post(`/contracts/${filesContract.value.id}/files`, fd)
+}
+async function uploadContractFiles(files) {
   try {
-    await api.post(`/contracts/${filesContract.value.id}/files`, fd)
-    message.success('合同文件已上传')
+    for (const f of files) await uploadContractFile(f)
+    message.success(files.length > 1 ? `已上传 ${files.length} 个文件` : '合同文件已上传')
     await loadFiles()
     load()
   } catch (e) { message.error(errMsg(e, '上传失败')) }
@@ -117,7 +121,8 @@ const columns = [
   { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
   { title: '合同文件', key: 'files', width: 92, render: (r) => h(NButton, { size: 'small', quaternary: true, onClick: () => openFiles(r) }, () => r.fileCount ? `文件 ${r.fileCount}` : '传文件') },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
-  { title: '操作', key: 'act', width: 190, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
+  { title: '操作', key: 'act', width: 250, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
+    h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => router.push('/contracts/' + r.id) }, () => '详情'),
     h(NButton, { size: 'small', onClick: () => openLink(r) }, () => '关联项目'),
     h(NButton, { size: 'small', onClick: () => openEdit(r) }, () => '编辑'),
     h(NButton, { size: 'small', quaternary: true, onClick: () => del(r) }, () => '删除')
@@ -174,7 +179,7 @@ const columns = [
         <div style="display:flex;align-items:center;margin-bottom:12px">
           <span class="small mut">{{ files.length }} 个文件（合同扫描件、电子版等）</span>
           <div style="flex:1"></div>
-          <n-button type="primary" size="small" @click="pickFile(uploadContractFile)">+ 上传文件</n-button>
+          <n-button type="primary" size="small" @click="pickFile(uploadContractFiles, true)">+ 上传文件（可多选）</n-button>
         </div>
         <div v-for="f in files" :key="f.id" style="display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-soft)">
           <div style="flex:1;min-width:0">
