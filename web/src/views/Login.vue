@@ -28,10 +28,10 @@ async function submit() {
   <div class="login-wrap">
     <div class="login-card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-        <div class="brand-logo" style="width:46px;height:46px;font-size:20px;border-radius:14px">C</div>
+        <div class="brand-logo" style="width:46px;height:46px;border-radius:14px"><img src="/logo.png" alt="宜宾规划设计咨询集团" /></div>
         <div>
-          <div style="font-size:21px;font-weight:800;line-height:1.2">CloudFri</div>
-          <div class="faint small">造价咨询台账系统</div>
+          <div style="font-size:21px;font-weight:800;line-height:1.2">造价管理系统</div>
+          <div class="faint small">宜宾规划设计咨询集团有限公司</div>
         </div>
       </div>
       <p class="mut small" style="margin:10px 0 22px">请使用公司账号登录。首次使用请联系管理员开通账号。</p>
@@ -44,7 +44,7 @@ async function submit() {
         </NFormItem>
         <NButton type="primary" size="large" block :loading="loading" @click="submit" style="margin-top:6px">登 录</NButton>
       </NForm>
-      <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">CloudFri · 宜宾规划设计咨询集团有限公司</p>
+      <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">造价管理系统 v1.0 · 宜宾规划设计咨询集团有限公司</p>
     </div>
   </div>
 </template>

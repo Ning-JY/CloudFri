@@ -60,8 +60,8 @@ function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logou
   <div class="app-shell">
     <aside class="side" :class="{ collapsed }">
       <div class="brand">
-        <div class="brand-logo">C</div>
-        <div class="brand-t"><b>CloudFri</b><span>造价咨询台账</span></div>
+        <div class="brand-logo"><img src="/logo.png" alt="宜宾规划设计咨询集团" /></div>
+        <div class="brand-t"><b>造价管理系统</b><span>宜宾规划设计咨询集团</span></div>
       </div>
       <nav>
         <template v-for="g in NAV" :key="g.group || 'root'">
@@ -74,6 +74,7 @@ function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logou
         </template>
       </nav>
       <div class="side-foot">
+        <div class="side-ver"><span class="cl">造价管理系统 v1.0</span></div>
         <button class="collapse-btn" @click="collapsed = !collapsed" :title="collapsed ? '展开侧边栏' : '收起侧边栏'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path :d="collapsed ? 'M9.5 5.5L16 12l-6.5 6.5' : 'M14.5 5.5L8 12l6.5 6.5'" /></svg>
           <span class="cl">{{ collapsed ? '' : '收起侧边栏' }}</span>
