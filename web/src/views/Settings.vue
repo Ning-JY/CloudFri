@@ -2,7 +2,7 @@
 import { ref, onMounted, h } from 'vue'
 import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { avatarFor } from '../utils'
+import { avatarFor, iconBtn } from '../utils'
 import { useAuthStore } from '../stores/auth'
 
 const message = useMessage()
@@ -82,9 +82,9 @@ const memberColumns = [
   { title: '部门', key: 'department', width: 130, render: (r) => r.department ? h(NTag, { size: 'small', bordered: false, type: r.department === '协作人员' ? 'warning' : 'info' }, () => r.department) : '—' },
   { title: '备注', key: 'remark', ellipsis: { tooltip: true }, render: (r) => r.remark || '—' },
   { title: '状态', key: 'isActive', width: 90, render: (r) => h(NTag, { size: 'small', type: r.isActive ? 'success' : 'default', bordered: false }, () => r.isActive ? '在职' : '已停用') },
-  ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 150, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', onClick: () => openMember(r) }, () => '编辑'),
-    r.isActive ? h(NButton, { size: 'small', quaternary: true, onClick: () => deactivateMember(r) }, () => '停用') : null
+  ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('pencil', 'green', '编辑', () => openMember(r)),
+    ...(r.isActive ? [iconBtn('power', 'orange', '停用', () => deactivateMember(r))] : [])
   ]) }] : [])
 ]
 const userColumns = [
@@ -92,9 +92,9 @@ const userColumns = [
   { title: '显示名', key: 'displayName' },
   { title: '角色', key: 'role', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false, type: r.role === 'Admin' ? 'success' : 'default' }, () => r.role === 'Admin' ? '管理员' : '成员') },
   { title: '状态', key: 'isActive', width: 90, render: (r) => r.isActive ? '启用' : '停用' },
-  { title: '操作', key: 'act', width: 190, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', onClick: () => resetPwd(r) }, () => '重置密码'),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => toggleUser(r) }, () => r.isActive ? '停用' : '启用')
+  { title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('key', 'violet', '重置密码', () => resetPwd(r)),
+    iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleUser(r))
   ]) }
 ]
 </script>

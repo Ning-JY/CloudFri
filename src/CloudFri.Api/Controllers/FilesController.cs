@@ -35,8 +35,13 @@ public class FilesController : ControllerBase
     private string CurrentUserName() =>
         User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "";
 
-    private static string ParseNote(int itemCount) =>
-        $"工程信息为字符串级提取（工程树/大写金额/计价依据）；清单明细已逐行提取（编码/名称/单位/工程量，共 {itemCount} 条）；综合单价与合价的二进制字段尚未可靠提取，暂不显示。";
+    private static string ParseNote(GcfxService.GcfxResult r)
+    {
+        var fee = r.Units.Any(u => u.Total.HasValue)
+            ? "费用汇总已按单位工程费用表提取（分部分项/措施/税前/增值税/总价）且勾稽一致"
+            : "费用汇总未提取到（文件无自洽的费用表）";
+        return $"工程信息为字符串级提取（工程树/大写金额/计价依据）；清单明细已锚定逐行提取（编码/名称/单位/工程量/综合单价/合价，共 {r.Items.Count} 条）；{fee}；工料机汇总尚未可靠提取，暂不显示。";
+    }
 
     /// <summary>取项目当前成果版本集合；没有则建 V1，并把旧文件（SetId 为空，整体版本功能上线前上传的）归入最早的版本集合。</summary>
     private async Task<DeliverableSet> EnsureCurrentSetAsync(int projectId)
@@ -127,7 +132,7 @@ public class FilesController : ControllerBase
                     Basis = r.Basis, Region = r.Region,
                     UnitsJson = JsonSerializer.Serialize(r.Units),
                     ItemsJson = JsonSerializer.Serialize(r.Items),
-                    Note = ParseNote(r.Items.Count)
+                    Note = ParseNote(r)
                 };
                 _db.GcfxParses.Add(parse);
                 await _db.SaveChangesAsync();
@@ -199,7 +204,7 @@ public class FilesController : ControllerBase
         parse.Region = r.Region;
         parse.UnitsJson = JsonSerializer.Serialize(r.Units);
         parse.ItemsJson = JsonSerializer.Serialize(r.Items);
-        parse.Note = ParseNote(r.Items.Count);
+        parse.Note = ParseNote(r);
         parse.ParsedAt = DateTime.Now;
         await _db.SaveChangesAsync();
         string? filledField = null;

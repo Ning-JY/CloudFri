@@ -2,7 +2,7 @@
 import { ref, onMounted, h } from 'vue'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmtSize } from '../utils'
+import { fmtSize, iconBtn } from '../utils'
 import { useAuthStore } from '../stores/auth'
 
 const message = useMessage()
@@ -86,10 +86,10 @@ const columns = [
   { title: '大小', key: 'sizeBytes', width: 90, align: 'right', render: (r) => fmtSize(r.sizeBytes) },
   { title: '上传日期', key: 'uploadedAt', width: 110, render: (r) => String(r.uploadedAt).slice(0, 10) },
   { title: '上传人', key: 'uploadedBy', width: 90 },
-  { title: '操作', key: 'act', width: 210, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', type: 'primary', onClick: () => openPreview(r) }, () => '在线预览'),
-    h(NButton, { size: 'small', onClick: () => download(r) }, () => '下载'),
-    ...(auth.isAdmin ? [h(NButton, { size: 'small', quaternary: true, onClick: () => del(r) }, () => '删除')] : [])
+  { title: '操作', key: 'act', width: 130, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('eye', 'blue', '在线预览', () => openPreview(r)),
+    iconBtn('download', 'slate', '下载', () => download(r)),
+    ...(auth.isAdmin ? [iconBtn('trash', 'red', '删除', () => del(r))] : [])
   ]) }
 ]
 </script>

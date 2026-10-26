@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, h } from 'vue'
 import { NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
+import { iconBtn } from '../utils'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -104,13 +105,13 @@ const columns = [
   { title: '摘要', key: 'summary', ellipsis: { tooltip: true }, render: (r) => summaryOf(r) },
   { title: '填写人', key: 'filledByName', width: 90, render: (r) => r.filledByName || '—' },
   { title: '填写日期', key: 'createdAt', width: 110, render: (r) => String(r.createdAt).slice(0, 10) },
-  { title: '操作', key: 'act', width: 330, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', onClick: () => openView(r) }, () => '查看'),
-    h(NButton, { size: 'small', onClick: () => openFill(tplById(r.templateId), r) }, () => '编辑'),
-    h(NButton, { size: 'small', onClick: () => copyOf(r) }, () => '复制'),
-    h(NButton, { size: 'small', onClick: () => downloadWord(r) }, () => '下载'),
-    h(NButton, { size: 'small', onClick: () => printRecord(r) }, () => '打印'),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => del(r) }, () => '删除')
+  { title: '操作', key: 'act', width: 216, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('eye', 'blue', '查看', () => openView(r)),
+    iconBtn('pencil', 'green', '编辑', () => openFill(tplById(r.templateId), r)),
+    iconBtn('copy', 'orange', '复制', () => copyOf(r)),
+    iconBtn('download', 'slate', '下载 Word', () => downloadWord(r)),
+    iconBtn('printer', 'violet', '打印', () => printRecord(r)),
+    iconBtn('trash', 'red', '删除', () => del(r))
   ]) }
 ]
 </script>

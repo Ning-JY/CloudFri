@@ -3,7 +3,7 @@ import { ref, computed, onMounted, h } from 'vue'
 import { NButton, useMessage, useDialog } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, todayStr } from '../utils'
+import { fmt, fmtSize, todayStr, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 
 const route = useRoute()
@@ -119,9 +119,9 @@ const projectColumns = [
   { title: '咨询费应收（万元）', key: 'fee', width: 130, align: 'right', render: (r) => fmt(r.fee) },
   { title: '该项目已收（万元）', key: 'receivedTotal', width: 130, align: 'right', render: (r) => fmt(r.receivedTotal) },
   { title: '其中本 合同名下（万元）', key: 'contractReceived', width: 150, align: 'right', render: (r) => fmt(r.contractReceived) },
-  { title: '操作', key: 'act', width: 150, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', onClick: () => router.push('/projects/' + r.id) }, () => '项目详情'),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => unlink(r.id) }, () => '取消关联')
+  { title: '操作', key: 'act', width: 96, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('eye', 'blue', '项目详情', () => router.push('/projects/' + r.id)),
+    iconBtn('unlink', 'red', '取消关联', () => unlink(r.id))
   ]) }
 ]
 const receiptColumns = [
@@ -171,9 +171,9 @@ const receiptColumns = [
             <div style="font-size:13.5px">{{ f.fileName }}</div>
             <div class="psub">{{ fmtSize(f.sizeBytes) }} · {{ String(f.uploadedAt).slice(0, 10) }} · {{ f.uploadedBy || '' }}</div>
           </div>
-          <n-button size="small" @click="previewRef.open(`/contracts/${id}/files/${f.id}/download`, f.fileName)">预览</n-button>
-          <n-button size="small" @click="downloadFile(f)">下载</n-button>
-          <n-button size="small" quaternary @click="delFile(f)">删除</n-button>
+          <button class="icbtn b-blue" title="预览" @click="previewRef.open(`/contracts/${id}/files/${f.id}/download`, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="icbtn b-slate" title="下载" @click="downloadFile(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+          <button class="icbtn b-red" title="删除" @click="delFile(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>
       </div>
 

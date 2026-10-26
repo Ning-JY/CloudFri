@@ -3,7 +3,7 @@ import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, fileKind } from '../utils'
+import { fmt, fmtSize, fileKind, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 
 const router = useRouter()
@@ -119,13 +119,13 @@ const columns = [
   { title: '合同金额（万元）', key: 'amount', width: 130, align: 'right', render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
   { title: '签订日期', key: 'signDate', width: 110, render: (r) => r.signDate || '—' },
   { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
-  { title: '合同文件', key: 'files', width: 92, render: (r) => h(NButton, { size: 'small', quaternary: true, onClick: () => openFiles(r) }, () => r.fileCount ? `文件 ${r.fileCount}` : '传文件') },
+  { title: '合同文件', key: 'files', width: 110, render: (r) => h('div', { style: 'display:flex;align-items:center;gap:7px' }, [iconBtn('clip', 'violet', '合同文件', () => openFiles(r)), h('span', { class: 'small mut' }, r.fileCount ? `${r.fileCount} 个` : '无')]) },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
-  { title: '操作', key: 'act', width: 250, render: (r) => h('div', { style: 'display:flex;gap:6px' }, [
-    h(NButton, { size: 'small', type: 'primary', ghost: true, onClick: () => router.push('/contracts/' + r.id) }, () => '详情'),
-    h(NButton, { size: 'small', onClick: () => openLink(r) }, () => '关联项目'),
-    h(NButton, { size: 'small', onClick: () => openEdit(r) }, () => '编辑'),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => del(r) }, () => '删除')
+  { title: '操作', key: 'act', width: 158, render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('eye', 'blue', '详情', () => router.push('/contracts/' + r.id)),
+    iconBtn('link', 'violet', '关联项目', () => openLink(r)),
+    iconBtn('pencil', 'green', '编辑', () => openEdit(r)),
+    iconBtn('trash', 'red', '删除', () => del(r))
   ]) }
 ]
 </script>
@@ -186,9 +186,9 @@ const columns = [
             <div style="font-size:13.5px">{{ f.fileName }}</div>
             <div class="psub">{{ fmtSize(f.sizeBytes) }} · {{ String(f.uploadedAt).slice(0, 10) }} · {{ f.uploadedBy || '' }}</div>
           </div>
-          <n-button size="small" @click="previewRef.open(`/contracts/${filesContract.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
-          <n-button size="small" @click="downloadContractFile(f)">下载</n-button>
-          <n-button size="small" quaternary @click="delContractFile(f)">删除</n-button>
+          <button class="icbtn b-blue" title="预览" @click="previewRef.open(`/contracts/${filesContract.id}/files/${f.id}/download`, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="icbtn b-slate" title="下载" @click="downloadContractFile(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+          <button class="icbtn b-red" title="删除" @click="delContractFile(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>
         <div v-if="!files.length" class="faint" style="text-align:center;padding:26px">暂无文件，点右上角上传合同扫描件</div>
       </n-drawer-content>

@@ -4,7 +4,7 @@ import { NButton } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr } from '../utils'
+import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 
@@ -347,7 +347,7 @@ const receiptColumns = [
   { title: '方式', key: 'method', width: 100 },
   { title: '经办人', key: 'handler', width: 90 },
   { title: '备注', key: 'note' },
-  { title: '', key: 'act', width: 60, render: (r) => h(NButton, { size: 'tiny', quaternary: true, onClick: () => delReceipt(r.id) }, () => '删除') }
+  { title: '', key: 'act', width: 46, render: (r) => iconBtn('trash', 'red', '删除收款', () => delReceipt(r.id)) }
 ]
 </script>
 
@@ -450,8 +450,8 @@ const receiptColumns = [
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 13px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 <span style="min-width:0">{{ f.fileName }}</span>
                 <span class="faint">{{ fmtSize(f.sizeBytes) }}</span>
-                <n-button size="tiny" quaternary @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)">预览</n-button>
-                <n-button size="tiny" quaternary @click="downloadContractFile(c, f)">下载</n-button>
+                <button class="icbtn b-blue" title="预览" @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                <button class="icbtn b-slate" title="下载" @click="downloadContractFile(c, f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
               </div>
             </div>
           </div>
@@ -491,9 +491,9 @@ const receiptColumns = [
               <div style="display:flex;gap:2px;margin-top:7px;flex-wrap:wrap;justify-content:center">
                 <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
                 <n-button v-if="g.cur && parseOf(g.cur.id)" size="tiny" quaternary @click="scrollToParse">解析</n-button>
-                <n-button v-if="g.cur && fileKind(g.cur.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('deliverables', g.cur)">预览</n-button>
-                <n-button v-if="g.cur" size="tiny" quaternary @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)">下载</n-button>
-                <n-button v-if="g.cur" size="tiny" quaternary @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })">删除</n-button>
+                <button v-if="g.cur && fileKind(g.cur.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('deliverables', g.cur)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                <button v-if="g.cur" class="icbtn b-slate" title="下载" @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                <button v-if="g.cur" class="icbtn b-red" title="删除" @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </div>
           </div>
@@ -510,9 +510,9 @@ const receiptColumns = [
                   <n-tag size="tiny" :bordered="false">{{ hf.catLabel }}</n-tag>
                   <span class="faint">{{ fmtSize(hf.sizeBytes) }} · {{ String(hf.uploadedAt).slice(0, 10) }}</span>
                   <span style="flex:1"></span>
-                  <n-button v-if="fileKind(hf.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('deliverables', hf)">预览</n-button>
-                  <n-button size="tiny" quaternary @click="downloadFile('deliverables', hf.id, hf.fileName)">下载</n-button>
-                  <n-button size="tiny" quaternary @click="confirmDelete('删除该历史文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })">删除</n-button>
+                  <button v-if="fileKind(hf.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('deliverables', hf)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                  <button class="icbtn b-slate" title="下载" @click="downloadFile('deliverables', hf.id, hf.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                  <button class="icbtn b-red" title="删除" @click="confirmDelete('删除该历史文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                 </div>
               </div>
             </div>
@@ -533,9 +533,9 @@ const receiptColumns = [
               <div class="doc-f" v-for="f in g.files" :key="f.id">
                 <span style="flex:1;min-width:0">{{ f.fileName }}</span>
                 <span class="faint">{{ String(f.uploadedAt).slice(0, 10) }}</span>
-                <n-button v-if="fileKind(f.fileName) !== 'other'" size="tiny" quaternary @click="previewFile('docs', f)">预览</n-button>
-                <n-button size="tiny" quaternary @click="downloadFile('docs', f.id, f.fileName)">下载</n-button>
-                <n-button size="tiny" quaternary @click="confirmDelete('删除该资料文件？', async () => { await api.delete(`/projects/${id}/files/docs/${f.id}`); load() })">删除</n-button>
+                <button v-if="fileKind(f.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('docs', f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                <button class="icbtn b-slate" title="下载" @click="downloadFile('docs', f.id, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                <button class="icbtn b-red" title="删除" @click="confirmDelete('删除该资料文件？', async () => { await api.delete(`/projects/${id}/files/docs/${f.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
               <div v-if="!g.files.length" class="doc-f faint">暂无文件</div>
               <n-button size="tiny" style="margin-top:4px" @click="pickFile(f => uploadDoc(g.cat, f))">+ 上传到此分类</n-button>
