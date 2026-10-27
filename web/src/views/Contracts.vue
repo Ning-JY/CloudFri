@@ -117,8 +117,8 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
         <n-button type="primary" @click="openCreate">+ 新建合同</n-button>
       </div>
     </div>
-    <div class="card" style="padding:6px 10px">
-      <div style="display:flex;justify-content:flex-end;padding:4px 2px 0">
+    <div class="card" style="padding:6px 10px;position:relative">
+      <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="合同台账" storage-key="contracts" />
       </div>
       <n-data-table :columns="columns" :data="rows" :bordered="false"

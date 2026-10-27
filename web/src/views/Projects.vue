@@ -119,8 +119,8 @@ onMounted(async () => {
       <div class="cell"><div class="lb">已收咨询费</div><div class="vl num">{{ fmt(sums.received) }} <small>万元</small></div></div>
     </div>
 
-    <div class="card" style="padding:6px 10px">
-      <div style="display:flex;justify-content:flex-end;padding:4px 2px 0">
+    <div class="card" style="padding:6px 10px;position:relative">
+      <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="项目台账" storage-key="projects" />
       </div>
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false"
