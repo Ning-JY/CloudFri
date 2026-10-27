@@ -104,6 +104,23 @@ public class DictsController : ControllerBase
         return Ok(new { d.Id });
     }
 
+    public record ReorderReq(string Group, int[] Ids);
+
+    /// <summary>拖动排序：按传入的 ID 顺序重写该组的 Sort（1..n）。</summary>
+    [Authorize(Roles = "Admin")]
+    [HttpPost("reorder")]
+    public async Task<IActionResult> Reorder(ReorderReq req)
+    {
+        var items = await _db.DictItems.Where(x => x.Group == req.Group && req.Ids.Contains(x.Id)).ToListAsync();
+        for (int i = 0; i < req.Ids.Length; i++)
+        {
+            var d = items.FirstOrDefault(x => x.Id == req.Ids[i]);
+            if (d != null) d.Sort = i + 1;
+        }
+        await _db.SaveChangesAsync();
+        return Ok(new { count = items.Count });
+    }
+
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Deactivate(int id)
@@ -132,7 +149,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> List()
     {
         var rows = await _db.Users.OrderBy(x => x.Id)
-            .Select(x => new { x.Id, x.UserName, x.DisplayName, x.Role, x.MemberId, x.IsActive, x.CreatedAt })
+            .Select(x => new { x.Id, x.UserName, x.DisplayName, x.Role, x.MemberId, x.IsActive, x.CreatedAt, x.LastLoginAt, x.LastLoginIp })
             .ToListAsync();
         return Ok(rows);
     }

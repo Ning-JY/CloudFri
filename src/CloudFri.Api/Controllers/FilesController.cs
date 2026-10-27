@@ -260,6 +260,20 @@ public class FilesController : ControllerBase
         return Ok(new { f.Id });
     }
 
+    public record DocCatReq(string Category);
+
+    /// <summary>更改项目资料分类（v1.1）：文件不动，只改归档分类。</summary>
+    [HttpPut("docs/{docId:int}/category")]
+    public async Task<IActionResult> ChangeDocCategory(int projectId, int docId, DocCatReq req)
+    {
+        var d = await _db.ProjectDocs.FirstOrDefaultAsync(x => x.Id == docId && x.ProjectId == projectId);
+        if (d == null) return NotFound();
+        if (string.IsNullOrWhiteSpace(req.Category)) return BadRequest(new { message = "分类不能为空" });
+        d.Category = req.Category.Trim();
+        await _db.SaveChangesAsync();
+        return Ok(new { d.Id, d.Category });
+    }
+
     [HttpDelete("docs/{docId:int}")]
     public async Task<IActionResult> DeleteDoc(int projectId, int docId)
     {
@@ -297,10 +311,25 @@ public class LibraryController : ControllerBase
         var query = _db.LibraryDocs.AsQueryable();
         if (!string.IsNullOrEmpty(category)) query = query.Where(x => x.Category == category);
         if (!string.IsNullOrWhiteSpace(q)) query = query.Where(x => x.Name.Contains(q));
-        var rows = await query.OrderByDescending(x => x.UploadedAt)
-            .Select(x => new { x.Id, x.Name, x.Category, x.Format, x.SizeBytes, x.UploadedBy, x.UploadedAt })
+        var rows = await query.OrderByDescending(x => x.IsPinned).ThenByDescending(x => x.UploadedAt)
+            .Select(x => new { x.Id, x.Name, x.Category, x.Format, x.SizeBytes, x.UploadedBy, x.UploadedAt, x.IsPinned, x.Description })
             .ToListAsync();
         return Ok(rows);
+    }
+
+    public record LibReq(string Name, string Category, string? Description, bool IsPinned);
+
+    /// <summary>编辑资料信息（改名/改分类/描述/置顶），文件本身不变。</summary>
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, LibReq req)
+    {
+        var d = await _db.LibraryDocs.FindAsync(id);
+        if (d == null) return NotFound();
+        d.Name = req.Name; d.Category = req.Category;
+        d.Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description;
+        d.IsPinned = req.IsPinned;
+        await _db.SaveChangesAsync();
+        return Ok(new { d.Id });
     }
 
     [HttpPost]

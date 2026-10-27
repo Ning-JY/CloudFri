@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmtSize, iconBtn } from '../utils'
 import { useAuthStore } from '../stores/auth'
+import PreviewModal from '../components/PreviewModal.vue'
+import { useDicts } from '../stores/dicts'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -12,7 +14,10 @@ const rows = ref([])
 const allRows = ref([])
 const cat = ref('')
 const q = ref('')
-const CATS = ['规章制度', '规范文件', '标准图集', '其他资料']
+// 资料分类走全站字典（LibCategory）
+const dicts = useDicts()
+const CATS = computed(() => dicts.names('LibCategory'))
+const previewRef = ref(null)
 
 async function load() {
   const params = {}
@@ -55,24 +60,31 @@ async function doUpload() {
   } catch (e) { message.error(errMsg(e, '上传失败')) }
 }
 
-// 在线预览：取 blob 后按类型渲染
-const showPreview = ref(false)
-const preview = ref({ title: '', kind: '', url: '' })
-async function openPreview(r) {
-  const { data } = await api.get(`/library/${r.id}/download`, { responseType: 'blob' })
-  const url = URL.createObjectURL(data)
-  const fmtUp = (r.format || '').toUpperCase()
-  const kind = fmtUp === 'PDF' ? 'pdf' : ['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP'].includes(fmtUp) ? 'img' : 'other'
-  preview.value = { title: r.name, kind, url }
-  showPreview.value = true
-}
+// 在线预览：统一走全局 PreviewModal（与项目/合同文件同一组件，支持 docx/xlsx 保格式预览）
+// 资料 Name 不带扩展名，传给预览组件时补上，组件才能按类型渲染
+const fileNameOf = (r) => r.format ? (r.name.toLowerCase().endsWith('.' + r.format.toLowerCase()) ? r.name : r.name + '.' + r.format.toLowerCase()) : r.name
+function openPreview(r) { previewRef.value.open(`/library/${r.id}/download`, fileNameOf(r)) }
 async function download(r) {
   const { data } = await api.get(`/library/${r.id}/download`, { responseType: 'blob' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(data)
-  a.download = r.name
+  a.download = fileNameOf(r) // 下载文件名补扩展名（后端 Name 是不带扩展名的显示名）
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 800)
+}
+// 编辑资料信息（名称/分类/说明/置顶）
+const showEdit = ref(false)
+const ef = ref({})
+function openEdit(r) { ef.value = { id: r.id, name: r.name, category: r.category, description: r.description || '', isPinned: !!r.isPinned }; showEdit.value = true }
+async function saveEdit() {
+  if (!ef.value.name) { message.warning('请填写资料名称'); return }
+  try {
+    await api.put('/library/' + ef.value.id, { name: ef.value.name, category: ef.value.category, description: ef.value.description || null, isPinned: ef.value.isPinned })
+    message.success('已保存')
+    showEdit.value = false
+    await loadCounts()
+    load()
+  } catch (e) { message.error(errMsg(e)) }
 }
 function del(r) {
   dialog.warning({ title: '删除资料', content: `确定删除「${r.name}」？`, positiveText: '删除', negativeText: '取消',
@@ -80,14 +92,21 @@ function del(r) {
 }
 
 const columns = [
-  { title: '资料名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('span', { class: 'pname' }, r.name) },
+  { title: '资料名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [
+      h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+        r.isPinned ? h(NTag, { size: 'tiny', type: 'warning', bordered: false }, () => '置顶') : null,
+        h('span', { class: 'pname' }, r.name)
+      ]),
+      r.description ? h('div', { class: 'psub' }, r.description) : null
+    ]) },
   { title: '分类', key: 'category', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false }, () => r.category) },
   { title: '格式', key: 'format', width: 70 },
   { title: '大小', key: 'sizeBytes', width: 90, align: 'right', render: (r) => fmtSize(r.sizeBytes) },
   { title: '上传日期', key: 'uploadedAt', width: 110, render: (r) => String(r.uploadedAt).slice(0, 10) },
   { title: '上传人', key: 'uploadedBy', width: 90 },
-  { title: '操作', key: 'act', width: 130, render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '操作', key: 'act', width: 158, render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('eye', 'blue', '在线预览', () => openPreview(r)),
+    iconBtn('pencil', 'green', '编辑（名称/分类/说明/置顶）', () => openEdit(r)),
     iconBtn('download', 'slate', '下载', () => download(r)),
     ...(auth.isAdmin ? [iconBtn('trash', 'red', '删除', () => del(r))] : [])
   ]) }
@@ -109,7 +128,7 @@ const columns = [
         <b style="font-size:14.5px">{{ cat || '全部资料' }}</b>
         <div style="flex:1"></div>
         <n-input v-model:value="q" placeholder="搜索资料名称" style="width:220px" clearable @update:value="load" />
-        <n-button type="primary" @click="upCat = cat || '规章制度'; showUpload = true">上传资料</n-button>
+        <n-button type="primary" @click="upCat = cat || CATS[0]; showUpload = true">上传资料</n-button>
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
@@ -135,15 +154,21 @@ const columns = [
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showPreview" preset="card" :title="preview.title" style="width:920px;border-radius:16px">
-      <iframe v-if="preview.kind === 'pdf'" :src="preview.url" style="width:100%;height:66vh;border:none;border-radius:8px;background:#f4f6f5"></iframe>
-      <div v-else-if="preview.kind === 'img'" style="text-align:center;background:#f7f9f7;padding:16px;border-radius:8px">
-        <img :src="preview.url" style="max-width:100%;max-height:66vh;border-radius:8px" />
-      </div>
-      <div v-else class="mut" style="padding:12px 4px">该格式暂不支持在线预览，请下载后查看。（支持预览：PDF、图片）</div>
+    <n-modal v-model:show="showEdit" preset="card" title="编辑资料" style="width:480px;border-radius:16px">
+      <n-form label-placement="top">
+        <n-form-item label="资料名称"><n-input v-model:value="ef.name" /></n-form-item>
+        <n-form-item label="分类"><n-select v-model:value="ef.category" :options="CATS.map(c => ({ label: c, value: c }))" /></n-form-item>
+        <n-form-item label="说明（这份资料是什么、用在哪）"><n-input v-model:value="ef.description" type="textarea" placeholder="如：2025 版计价规范电子版，清单编制时查条文用" /></n-form-item>
+        <n-form-item label="置顶"><n-switch v-model:value="ef.isPinned" /><span class="small mut" style="margin-left:10px">置顶的资料排在列表最前面</span></n-form-item>
+      </n-form>
       <template #footer>
-        <div style="display:flex;justify-content:flex-end"><n-button @click="showPreview = false">关闭</n-button></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <n-button @click="showEdit = false">取消</n-button>
+          <n-button type="primary" @click="saveEdit">保存</n-button>
+        </div>
       </template>
     </n-modal>
+
+    <PreviewModal ref="previewRef" />
   </div>
 </template>

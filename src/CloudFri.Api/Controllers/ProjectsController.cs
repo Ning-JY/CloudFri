@@ -37,8 +37,8 @@ public class ProjectsController : ControllerBase
             .Select(x => new
             {
                 x.Id, x.Code, x.Name, x.Client, x.BizType, x.Status, x.OwnerMemberId,
-                x.AcceptedDate, x.SubmitAmount, x.ApprovedAmount, x.Fee,
-                Received = _db.Receipts.Where(r => r.ProjectId == x.Id).Sum(r => (decimal?)r.Amount) ?? 0,
+                x.AcceptedDate, x.SubmitAmount, x.ApprovedAmount, x.Fee, x.CreatedBy, x.CreatedAt,
+                Received = _db.Receipts.Where(r => r.ProjectId == x.Id && r.IsReceived).Sum(r => (decimal?)r.Amount) ?? 0,
                 OwnerName = _db.Members.Where(m => m.Id == x.OwnerMemberId).Select(m => m.Name).FirstOrDefault()
             }).ToListAsync();
         return Ok(rows);
@@ -85,7 +85,7 @@ public class ProjectsController : ControllerBase
                               from c in gj.DefaultIfEmpty()
                               select new
                               {
-                                  r.Id, r.Date, r.Amount, r.Method, r.Handler, r.Note, r.ContractId,
+                                  r.Id, r.Date, r.Amount, r.Method, r.Handler, r.Note, r.ContractId, r.InvoiceNo, r.IsReceived, r.ReceivedDate,
                                   ContractNo = c != null ? c.No : null,
                                   ContractName = c != null ? c.Name : null
                               }).ToListAsync();
@@ -116,12 +116,13 @@ public class ProjectsController : ControllerBase
             {
                 p.Id, p.Code, p.Name, p.Client, p.ContactName, p.ContactPhone, p.BizType, p.Scale,
                 p.Status, p.OwnerMemberId, OwnerName = ownerName, p.AcceptedDate, p.DueDate, p.ReportDate, p.ReportNo,
-                p.SubmitAmount, p.ApprovedAmount, p.Fee, p.Description, p.CreatedAt, p.UpdatedAt
+                p.SubmitAmount, p.ApprovedAmount, p.Fee, p.Description, p.CreatedAt, p.UpdatedAt, p.CreatedBy
             },
             Team = teamOut,
             Contracts = contracts,
             Receipts = receipts,
-            ReceivedTotal = receipts.Sum(r => r.Amount),
+            ReceivedTotal = receipts.Where(r => r.IsReceived).Sum(r => r.Amount),
+            InvoicedTotal = receipts.Sum(r => r.Amount),
             Files = files,
             DeliverableSets = sets,
             Docs = docs,
@@ -141,7 +142,8 @@ public class ProjectsController : ControllerBase
             Name = req.Name, Client = req.Client, ContactName = req.ContactName, ContactPhone = req.ContactPhone,
             BizType = req.BizType, Scale = req.Scale, Status = req.Status, OwnerMemberId = req.OwnerMemberId,
             AcceptedDate = req.AcceptedDate, DueDate = req.DueDate, ReportDate = req.ReportDate, ReportNo = req.ReportNo,
-            SubmitAmount = req.SubmitAmount, ApprovedAmount = req.ApprovedAmount, Fee = req.Fee, Description = req.Description
+            SubmitAmount = req.SubmitAmount, ApprovedAmount = req.ApprovedAmount, Fee = req.Fee, Description = req.Description,
+            CreatedBy = User.DisplayName()
         };
         _db.Projects.Add(p);
         await _db.SaveChangesAsync();
@@ -216,18 +218,33 @@ public class ReceiptsController : ControllerBase
     private readonly AppDbContext _db;
     public ReceiptsController(AppDbContext db) => _db = db;
 
-    public record ReceiptReq(DateOnly Date, decimal Amount, string? Method, string? Handler, string? Note, int? ContractId = null);
+    public record ReceiptReq(DateOnly Date, decimal Amount, string? Method, string? Handler, string? Note, int? ContractId = null, string? InvoiceNo = null);
 
+    /// <summary>新增开票：登记一张发票（Date=开票日期），此时 IsReceived=false，钱还没到账。</summary>
     [HttpPost]
     public async Task<IActionResult> Create(int projectId, ReceiptReq req)
     {
         if (!await _db.Projects.AnyAsync(x => x.Id == projectId)) return NotFound();
         if (req.ContractId is int cid && !await _db.Contracts.AnyAsync(x => x.Id == cid))
             return BadRequest(new { message = "所选合同不存在" });
-        var r = new Receipt { ProjectId = projectId, ContractId = req.ContractId, Date = req.Date, Amount = req.Amount, Method = req.Method, Handler = req.Handler, Note = req.Note };
+        var r = new Receipt { ProjectId = projectId, ContractId = req.ContractId, Date = req.Date, Amount = req.Amount, Method = req.Method, Handler = req.Handler, Note = req.Note, InvoiceNo = req.InvoiceNo, IsReceived = false };
         _db.Receipts.Add(r);
         await _db.SaveChangesAsync();
         return Ok(new { r.Id });
+    }
+
+    public record ConfirmReq(DateOnly? ReceivedDate);
+
+    /// <summary>确认收款：把一张已开票记录置为已到账（仿 EnterpriseMS 的 Received 动作）。</summary>
+    [HttpPost("{id:int}/confirm")]
+    public async Task<IActionResult> Confirm(int projectId, int id, ConfirmReq req)
+    {
+        var r = await _db.Receipts.FirstOrDefaultAsync(x => x.Id == id && x.ProjectId == projectId);
+        if (r == null) return NotFound();
+        r.IsReceived = true;
+        r.ReceivedDate = req.ReceivedDate ?? DateOnly.FromDateTime(DateTime.Now);
+        await _db.SaveChangesAsync();
+        return Ok(new { r.Id, r.IsReceived, r.ReceivedDate });
     }
 
     [HttpDelete("{id:int}")]

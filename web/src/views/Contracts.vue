@@ -1,19 +1,21 @@
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, fmtSize, fileKind, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
+import { useDicts } from '../stores/dicts'
 
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const rows = ref([])
-const projects = ref([])
 const q = ref('')
 const type = ref('')
-const TYPES = ['框架合同', '单项合同', '补充协议']
+// 合同类型走全站字典
+const dicts = useDicts()
+const TYPES = computed(() => dicts.names('ContractType'))
 const previewRef = ref(null)
 
 async function load() {
@@ -23,11 +25,7 @@ async function load() {
   const { data } = await api.get('/contracts', { params })
   rows.value = data
 }
-onMounted(async () => {
-  const { data } = await api.get('/projects')
-  projects.value = data
-  load()
-})
+onMounted(() => { load() })
 
 const showForm = ref(false)
 const cf = ref({})
@@ -35,33 +33,13 @@ function openCreate() {
   cf.value = { no: '', name: '', type: '单项合同', partyA: '', amount: null, amountNote: '', signDate: null, status: '履行中' }
   showForm.value = true
 }
-function openEdit(r) { cf.value = { ...r }; showForm.value = true }
+// 编辑/删除不在列表里操作：统一进合同详情页（点行进入）。
 async function save() {
   if (!cf.value.no || !cf.value.name) { message.warning('请填写合同编号和名称'); return }
   try {
-    if (cf.value.id) await api.put('/contracts/' + cf.value.id, cf.value)
-    else await api.post('/contracts', cf.value)
+    await api.post('/contracts', cf.value)
     message.success('已保存')
     showForm.value = false
-    load()
-  } catch (e) { message.error(errMsg(e)) }
-}
-function del(r) {
-  dialog.warning({ title: '删除合同', content: `确定删除合同「${r.name}」？其与项目的关联将一并解除。`, positiveText: '删除', negativeText: '取消',
-    onPositiveClick: async () => { await api.delete('/contracts/' + r.id); message.success('已删除'); load() } })
-}
-
-// 关联项目
-const showLink = ref(false)
-const linkContract = ref(null)
-const linkProjectId = ref(null)
-const linkPrimary = ref(false)
-function openLink(r) { linkContract.value = r; linkProjectId.value = null; linkPrimary.value = false; showLink.value = true }
-async function doLink() {
-  try {
-    await api.post(`/contracts/${linkContract.value.id}/link`, { projectId: linkProjectId.value, isPrimary: linkPrimary.value })
-    message.success('已关联')
-    showLink.value = false
     load()
   } catch (e) { message.error(errMsg(e)) }
 }
@@ -121,12 +99,7 @@ const columns = [
   { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
   { title: '合同文件', key: 'files', width: 110, render: (r) => h('div', { style: 'display:flex;align-items:center;gap:7px' }, [iconBtn('clip', 'violet', '合同文件', () => openFiles(r)), h('span', { class: 'small mut' }, r.fileCount ? `${r.fileCount} 个` : '无')]) },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
-  { title: '操作', key: 'act', width: 158, render: (r) => h('div', { style: 'display:flex' }, [
-    iconBtn('eye', 'blue', '详情', () => router.push('/contracts/' + r.id)),
-    iconBtn('link', 'violet', '关联项目', () => openLink(r)),
-    iconBtn('pencil', 'green', '编辑', () => openEdit(r)),
-    iconBtn('trash', 'red', '删除', () => del(r))
-  ]) }
+  { title: '创建', key: 'createdAt', width: 132, render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
 ]
 </script>
 
@@ -142,13 +115,15 @@ const columns = [
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
-      <n-data-table :columns="columns" :data="rows" :bordered="false" />
+      <n-data-table :columns="columns" :data="rows" :bordered="false"
+        :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
+        :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/contracts/' + row.id) })" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无合同</div>
     </div>
 
-    <!-- 新建 / 编辑合同：抽屉 -->
+    <!-- 新建合同：抽屉（编辑在合同详情页里） -->
     <n-drawer v-model:show="showForm" :width="560" placement="right">
-      <n-drawer-content :title="cf.id ? '编辑合同' : '新建合同'" closable>
+      <n-drawer-content title="新建合同" closable>
         <n-form label-placement="top">
           <n-grid :cols="2" :x-gap="12">
             <n-form-item-gi label="合同编号 *"><n-input v-model:value="cf.no" placeholder="如 HT-2026-001" /></n-form-item-gi>
@@ -193,21 +168,6 @@ const columns = [
         <div v-if="!files.length" class="faint" style="text-align:center;padding:26px">暂无文件，点右上角上传合同扫描件</div>
       </n-drawer-content>
     </n-drawer>
-
-    <n-modal v-model:show="showLink" preset="card" title="关联到项目" style="width:480px;border-radius:16px">
-      <n-form label-placement="top">
-        <n-form-item :label="'合同：' + (linkContract?.name || '')">
-          <n-select v-model:value="linkProjectId" filterable :options="projects.map(p=>({label:p.code + ' · ' + p.name, value:p.id}))" placeholder="选择项目" />
-        </n-form-item>
-        <n-checkbox v-model:checked="linkPrimary">设为该项目的主合同</n-checkbox>
-      </n-form>
-      <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:10px">
-          <n-button @click="showLink = false">取消</n-button>
-          <n-button type="primary" :disabled="!linkProjectId" @click="doLink">确认关联</n-button>
-        </div>
-      </template>
-    </n-modal>
 
     <PreviewModal ref="previewRef" />
   </div>

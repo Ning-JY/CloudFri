@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, priceOf, statusType, todayStr } from '../utils'
+import { useDicts } from '../stores/dicts'
 
 const router = useRouter()
 const message = useMessage()
@@ -23,8 +24,10 @@ const YEAR_OPTS = [
 ]
 const loading = ref(false)
 
-const BIZ_TYPES = ['结算审核', '预算编制', '清单控制价', '竣工决算', '跟踪审计', '全过程咨询']
-const STATUSES = ['编制中', '审核中', '已出报告', '已归档']
+// 业务类型/状态走全站字典（字典维护里增删排序即生效），store 未加载时用兜底值
+const dicts = useDicts()
+const BIZ_TYPES = computed(() => dicts.names('BizType'))
+const STATUSES = computed(() => dicts.names('ProjectStatus'))
 
 async function load() {
   loading.value = true
@@ -56,7 +59,8 @@ const columns = [
   { title: '已收', key: 'received', width: 95, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
   { title: '负责人', key: 'ownerName', width: 86, render: (r) => r.ownerName || '—' },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
-  { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') }
+  { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') },
+  { title: '创建', key: 'createdAt', width: 132, render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
 ]
 // 删除项目不在列表里操作（防误删）：统一在项目详情页头部删除。
 
@@ -113,6 +117,7 @@ onMounted(async () => {
 
     <div class="card" style="padding:6px 10px">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false"
+        :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/projects/' + row.id) })" />
       <div v-if="!loading && !rows.length" class="faint" style="text-align:center;padding:26px">没有符合条件的项目，试试调整筛选或新建登记</div>
     </div>

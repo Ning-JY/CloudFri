@@ -123,12 +123,14 @@ public class StatsController : ControllerBase
         var projects = await _db.Projects
             .Select(p => new { p.Id, p.Code, p.Name, p.Client, p.BizType, p.Status, p.Fee, p.SubmitAmount, p.ApprovedAmount, p.AcceptedDate, p.OwnerMemberId })
             .ToListAsync();
-        var receipts = await _db.Receipts.Select(r => new { r.ProjectId, r.Amount, r.Date }).ToListAsync();
+        var receipts = await _db.Receipts.Select(r => new { r.ProjectId, r.Amount, r.Date, r.IsReceived, r.ReceivedDate }).ToListAsync();
         var members = await _db.Members.Where(m => m.IsActive).Select(m => new { m.Id, m.Name }).ToListAsync();
 
-        var receivedByProject = receipts.GroupBy(r => r.ProjectId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        // 「已收」口径（v1.1 两段式）：只计已确认收款的记录；月度趋势按到账日期计
+        var receivedByProject = receipts.Where(r => r.IsReceived).GroupBy(r => r.ProjectId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
         var feeTotal = projects.Sum(p => p.Fee);
-        var receivedTotal = receipts.Sum(r => r.Amount);
+        var receivedTotal = receipts.Where(r => r.IsReceived).Sum(r => r.Amount);
+        var invoicedTotal = receipts.Sum(r => r.Amount);
 
         var byStatus = projects.GroupBy(p => p.Status).Select(g => new { Status = g.Key, Count = g.Count() }).ToList();
         var byType = projects.GroupBy(p => p.BizType).Select(g => new { Type = g.Key, Count = g.Count(), Fee = g.Sum(x => x.Fee) }).ToList();
@@ -141,7 +143,7 @@ public class StatsController : ControllerBase
             {
                 Month = d.ToString("yyyy-MM"),
                 NewProjects = projects.Count(p => p.AcceptedDate != null && p.AcceptedDate.Value.Year == d.Year && p.AcceptedDate.Value.Month == d.Month),
-                Received = receipts.Where(r => r.Date.Year == d.Year && r.Date.Month == d.Month).Sum(r => r.Amount)
+                Received = receipts.Where(r => r.IsReceived && (r.ReceivedDate ?? r.Date).Year == d.Year && (r.ReceivedDate ?? r.Date).Month == d.Month).Sum(r => r.Amount)
             };
         }).ToList();
 
@@ -168,6 +170,7 @@ public class StatsController : ControllerBase
                 Reported = projects.Count(p => p.Status == "已出报告"),
                 FeeTotal = feeTotal,
                 ReceivedTotal = receivedTotal,
+                InvoicedTotal = invoicedTotal,
                 Unreceived = feeTotal - receivedTotal
             },
             ByStatus = byStatus,

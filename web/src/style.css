@@ -9,7 +9,7 @@
   --line: #dde5df;
   --line-soft: #e8edea;
   --red: #c0392b;
-  --bg: #e9ebea;
+  --bg: #f1eee2;
   --card: rgba(255, 255, 255, 0.88);
   --radius: 16px;
 }
@@ -21,8 +21,9 @@ body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(163, 189, 252, 0.35), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(24, 97, 64, 0.14), transparent 55%),
+    radial-gradient(900px 480px at 85% -10%, rgba(163, 189, 252, 0.30), transparent 60%),
+    radial-gradient(720px 430px at -8% -6%, rgba(246, 205, 120, 0.30), transparent 55%),
+    radial-gradient(800px 500px at -10% 110%, rgba(24, 97, 64, 0.12), transparent 55%),
     var(--bg);
   font-size: 14px;
 }
@@ -93,6 +94,9 @@ body {
 .kpi.purple { --acc: #7c5cd6; --accd: #6543b8; --accbg: #f0eafd; }
 .kpi.green { --acc: #1f9d67; --accd: #157347; --accbg: #e2f3e8; }
 .kpi.orange { --acc: #e8862e; --accd: #c26a12; --accbg: #fdeeda; }
+.kpi.pink { --acc: #d95f8e; --accd: #ad3a68; --accbg: #fce9f1; }
+.kpi.teal { --acc: #1f9d94; --accd: #12716a; --accbg: #e1f4f1; }
+.kpi.yellow { --acc: #d9a41f; --accd: #9c7408; --accbg: #fdf3d0; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* 图标操作按钮：浅色圆角底 + 彩色图形图标，按动作区分颜色（列表/卡片行内操作） */
@@ -106,6 +110,9 @@ body {
 .icbtn.b-violet { background: #f0eafd; color: #6543b8; }
 .icbtn.b-orange { background: #fdeeda; color: #c26a12; }
 .icbtn.b-slate { background: #edf1f5; color: #5b6b7f; }
+.icbtn.b-pink { background: #fce9f1; color: #ad3a68; }
+.icbtn.b-teal { background: #e1f4f1; color: #12716a; }
+.icbtn.b-yellow { background: #fdf3d0; color: #9c7408; }
 
 /* 待处理列表行（样稿式：左侧浅色图标块 + 标题/说明 + 右侧时间） */
 .todo-it { display: flex; gap: 11px; padding: 10px 2px; border-top: 1px solid var(--line-soft); align-items: flex-start; cursor: pointer; }
@@ -116,6 +123,9 @@ body {
 .todo-ic.c-violet { background: #f0eafd; color: #6543b8; }
 .todo-ic.c-orange { background: #fdeeda; color: #c26a12; }
 .todo-ic.c-green { background: #e2f3e8; color: #157347; }
+.todo-ic.c-pink { background: #fce9f1; color: #ad3a68; }
+.todo-ic.c-teal { background: #e1f4f1; color: #12716a; }
+.todo-ic.c-yellow { background: #fdf3d0; color: #9c7408; }
 .todo-ic.c-slate { background: #edf1f5; color: #5b6b7f; }
 .todo-it .when { margin-left: auto; font-size: 12px; color: var(--faint); white-space: nowrap; padding-top: 2px; }
 
@@ -172,6 +182,9 @@ body {
 .card-ic.b { background: linear-gradient(135deg, #5b83e6, #2f5fd0); }
 .card-ic.o { background: linear-gradient(135deg, #e8a04c, #b96a12); }
 .card-ic.p { background: linear-gradient(135deg, #9a7fe0, #6d4fc2); }
+.card-ic.pk { background: linear-gradient(135deg, #e57ba4, #c24a7c); }
+.card-ic.tl { background: linear-gradient(135deg, #3cbdb2, #17857b); }
+.card-ic.yl { background: linear-gradient(135deg, #e3ba4a, #b98a10); }
 .fring.sm { width: 76px; height: 76px; flex: 0 0 76px; }
 .fring.sm svg { width: 76px; height: 76px; }
 .ftiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

@@ -3,11 +3,13 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown, useMessage } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
+import { useDicts } from '../stores/dicts'
 import api, { errMsg } from '../api'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+useDicts().load() // 全站字典预加载（各页下拉统一读字典 store）
 const message = useMessage()
 const collapsed = ref(false)
 
@@ -74,7 +76,7 @@ function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logou
         </template>
       </nav>
       <div class="side-foot">
-        <div class="side-ver"><span class="cl">造价管理系统 v1.0</span></div>
+        <div class="side-ver"><span class="cl">造价管理系统 v1.1</span></div>
         <button class="collapse-btn" @click="collapsed = !collapsed" :title="collapsed ? '展开侧边栏' : '收起侧边栏'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path :d="collapsed ? 'M9.5 5.5L16 12l-6.5 6.5' : 'M14.5 5.5L8 12l6.5 6.5'" /></svg>
           <span class="cl">{{ collapsed ? '' : '收起侧边栏' }}</span>

@@ -40,6 +40,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -290,8 +293,14 @@ namespace CloudFri.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("Format")
                         .HasColumnType("longtext");
+
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -392,6 +401,9 @@ namespace CloudFri.Api.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext");
@@ -600,6 +612,12 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<string>("Handler")
                         .HasColumnType("longtext");
 
+                    b.Property<string>("InvoiceNo")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IsReceived")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("Method")
                         .HasColumnType("longtext");
 
@@ -608,6 +626,9 @@ namespace CloudFri.Api.Data.Migrations
 
                     b.Property<int>("ProjectId")
                         .HasColumnType("int");
+
+                    b.Property<DateOnly?>("ReceivedDate")
+                        .HasColumnType("date");
 
                     b.HasKey("Id");
 
@@ -631,6 +652,12 @@ namespace CloudFri.Api.Data.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("LastLoginIp")
+                        .HasColumnType("longtext");
 
                     b.Property<int?>("MemberId")
                         .HasColumnType("int");

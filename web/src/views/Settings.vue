@@ -4,19 +4,21 @@ import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { avatarFor, iconBtn, AVATAR_PRESETS } from '../utils'
 import { useAuthStore } from '../stores/auth'
+import { useDicts } from '../stores/dicts'
 
 const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 const tab = ref('members')
 const members = ref([])
-const dicts = ref([])
+// 字典直接用全站 store：这里的增删/排序保存后刷新 store，全站下拉立即生效
+const dictStore = useDicts()
 const users = ref([])
 
 async function loadAll() {
-  const [m, d] = await Promise.all([api.get('/members?includeInactive=true'), api.get('/dicts')])
+  const m = await api.get('/members?includeInactive=true')
   members.value = m.data
-  dicts.value = d.data
+  await dictStore.load(true)
   if (auth.isAdmin) {
     const u = await api.get('/users')
     users.value = u.data
@@ -50,16 +52,31 @@ async function toggleMember(m) {
 const GROUP_NAMES = { BizType: '业务类型', ProjectStatus: '项目状态', ContractType: '合同类型', TeamRole: '团队角色', DocCategory: '项目资料分类', LibCategory: '资料库分类' }
 const showDict = ref(false)
 const df = ref({})
-function openDict(group) { df.value = { group, name: '', sort: dicts.value.filter(x => x.group === group).length + 1 }; showDict.value = true }
+function openDict(group) { df.value = { group, name: '', sort: dictStore.rows(group).length + 1 }; showDict.value = true }
 async function saveDict() {
   try {
     await api.post('/dicts', df.value)
-    message.success('已添加'); showDict.value = false; loadAll()
+    message.success('已添加'); showDict.value = false; await dictStore.load(true)
   } catch (e) { message.error(errMsg(e)) }
 }
 async function delDict(d) {
   await api.delete('/dicts/' + d.id)
-  message.success('已停用'); loadAll()
+  message.success('已停用'); await dictStore.load(true)
+}
+// 拖动排序：拖到目标行放下 → 按新顺序调 reorder 保存（Sort 重写为 1..n，全站下拉顺序随之变）
+const dragCtx = ref(null)
+function dragStart(g, i) { dragCtx.value = { g, i } }
+async function dragDrop(g, i) {
+  if (!dragCtx.value || dragCtx.value.g !== g || dragCtx.value.i === i) { dragCtx.value = null; return }
+  const list = [...dictStore.rows(g)]
+  const [moved] = list.splice(dragCtx.value.i, 1)
+  list.splice(i, 0, moved)
+  dragCtx.value = null
+  try {
+    await api.post('/dicts/reorder', { group: g, ids: list.map(x => x.id) })
+    await dictStore.load(true)
+    message.success('顺序已保存')
+  } catch (e) { message.error(errMsg(e)) }
 }
 
 // 用户（管理员）
@@ -97,6 +114,9 @@ const userColumns = [
   { title: '显示名', key: 'displayName' },
   { title: '角色', key: 'role', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false, type: r.role === 'Admin' ? 'success' : 'default' }, () => r.role === 'Admin' ? '管理员' : '成员') },
   { title: '状态', key: 'isActive', width: 90, render: (r) => r.isActive ? '启用' : '停用' },
+  { title: '最后登录', key: 'lastLoginAt', width: 180, render: (r) => r.lastLoginAt
+      ? h('div', [h('div', { class: 'num mut' }, String(r.lastLoginAt).replace('T', ' ').slice(0, 16)), h('div', { class: 'psub' }, r.lastLoginIp || '')])
+      : h('span', { class: 'faint' }, '从未登录') },
   { title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('key', 'violet', '重置密码', () => resetPwd(r)),
     iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleUser(r))
@@ -121,14 +141,19 @@ const userColumns = [
     </div>
 
     <div class="card" v-if="tab === 'dicts'">
-      <div class="card-h"><h3>字典维护</h3><div class="sp"></div><span class="small faint">业务类型、状态、分类等下拉选项</span></div>
+      <div class="card-h"><h3>字典维护</h3><div class="sp"></div><span class="small faint">下拉选项的顺序 = 拖动后的顺序，保存后全站生效</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
         <div v-for="(label, g) in GROUP_NAMES" :key="g" style="border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px">
           <div style="display:flex;align-items:center;margin-bottom:8px"><b style="font-size:13.5px">{{ label }}</b><div style="flex:1"></div>
             <n-button v-if="auth.isAdmin" size="tiny" @click="openDict(g)">+ 添加</n-button></div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            <n-tag v-for="d in dicts.filter(x => x.group === g)" :key="d.id" :closable="auth.isAdmin" @close="delDict(d)">{{ d.name }}</n-tag>
-            <span v-if="!dicts.filter(x => x.group === g).length" class="faint small">无</span>
+          <div>
+            <div v-for="(d, i) in dictStore.rows(g)" :key="d.id" class="dict-row" :draggable="auth.isAdmin"
+              @dragstart="dragStart(g, i)" @dragover.prevent @drop="dragDrop(g, i)">
+              <svg class="grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg>
+              <span style="flex:1">{{ d.name }}</span>
+              <button v-if="auth.isAdmin" class="icbtn b-red" title="停用" @click="delDict(d)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+            <span v-if="!dictStore.rows(g).length" class="faint small">无</span>
           </div>
         </div>
       </div>
@@ -206,4 +231,7 @@ const userColumns = [
 .avatar-grid img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: transform .1s; }
 .avatar-grid img:hover { transform: scale(1.08); }
 .avatar-grid img.on { border-color: var(--pri); box-shadow: 0 0 0 3px rgba(24, 97, 64, .18); }
+.dict-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; font-size: 13px; }
+.dict-row:hover { background: #f2f6f2; }
+.dict-row .grip { width: 15px; height: 15px; color: #b3beb5; cursor: grab; flex: 0 0 15px; }
 </style>

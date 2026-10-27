@@ -1,12 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { NButton } from 'naive-ui'
+import { NButton, NTag } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
+import { useDicts } from '../stores/dicts'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,10 +20,12 @@ const d = ref(null)
 const members = ref([])
 const allContracts = ref([])
 const previewRef = ref(null)
-const BIZ_TYPES = ['结算审核', '预算编制', '清单控制价', '竣工决算', '跟踪审计', '全过程咨询']
-const STATUSES = ['编制中', '审核中', '已出报告', '已归档']
-const ROLES = ['项目负责人', '编制人', '审核人', '审定人', '配合人员']
-const DOC_CATS = ['设计图纸', '隐蔽工程资料', '工作联系函', '会议纪要', '其他资料']
+// 业务类型/状态/团队角色/资料分类统一走全站字典（设置里维护后即生效），store 有兜底值
+const dicts = useDicts()
+const BIZ_TYPES = computed(() => dicts.names('BizType'))
+const STATUSES = computed(() => dicts.names('ProjectStatus'))
+const ROLES = computed(() => dicts.names('TeamRole'))
+const DOC_CATS = computed(() => dicts.names('DocCategory'))
 const FILE_CATS = [
   { key: 'Software', label: '软件版', icon: 'GCFX', cls: 'cg' },
   { key: 'Document', label: '文档版', icon: 'XLS', cls: 'cb' },
@@ -55,13 +58,18 @@ const contractAmount = computed(() => {
   return cs.reduce((a, c) => a + (c.amount || 0), 0)
 })
 const received = computed(() => d.value?.receivedTotal || 0)
+const invoiced = computed(() => d.value?.invoicedTotal || 0)
+// 收费圆环双段（v1.1 两段式）：深绿=已收、橙=已开票未收，占比均以应收咨询费为分母
+const RING_C = 251.3
 const feePct = computed(() => (p.value && p.value.fee > 0) ? Math.min(100, Math.round(received.value / p.value.fee * 100)) : 0)
-const ringOffset = computed(() => (251.3 * (1 - feePct.value / 100)).toFixed(1))
+const recvArc = computed(() => (RING_C * Math.min(received.value, p.value?.fee || 0) / (p.value?.fee || 1)).toFixed(1))
+const invArc = computed(() => (RING_C * Math.max(Math.min(invoiced.value, p.value?.fee || 0) - Math.min(received.value, p.value?.fee || 0), 0) / (p.value?.fee || 1)).toFixed(1))
 const lastReceipt = computed(() => {
   const rs = d.value?.receipts || []
   return rs.length ? rs[rs.length - 1] : null
 })
-const stepIdx = computed(() => p.value ? STATUSES.indexOf(p.value.status) : 0)
+const stepIdx = computed(() => p.value ? STATUSES.value.indexOf(p.value.status) : 0)
+const shareTotal = computed(() => (d.value?.team || []).reduce((a, t) => a + (Number(t.share) || 0), 0))
 
 const amounts = computed(() => {
   if (!p.value) return []
@@ -158,8 +166,22 @@ const gcfxTarget = computed(() => {
 })
 const docGroups = computed(() => {
   if (!d.value) return []
-  return DOC_CATS.map(cat => ({ cat, files: d.value.docs.filter(x => x.category === cat) }))
+  return DOC_CATS.value.map(cat => ({ cat, files: d.value.docs.filter(x => x.category === cat) }))
 })
+// 更改资料分类（传错分类不用删了重传）
+const showDocCat = ref(false)
+const dcFile = ref(null)
+const dcCat = ref('')
+function openDocCatEdit(f) { dcFile.value = f; dcCat.value = f.category; showDocCat.value = true }
+async function saveDocCat() {
+  try {
+    await api.put(`/projects/${id}/files/docs/${dcFile.value.id}/category`, { category: dcCat.value })
+    message.success('分类已改为「' + dcCat.value + '」')
+    openDocCat.value = dcCat.value
+    showDocCat.value = false
+    await load()
+  } catch (e) { message.error(errMsg(e)) }
+}
 const openDocCat = ref('设计图纸')
 const histOpen = ref({})
 function toggleHist(key) { histOpen.value = { ...histOpen.value, [key]: !histOpen.value[key] } }
@@ -247,7 +269,7 @@ function confirmDelete(text, fn) {
 }
 
 // 更改状态（头部按钮下拉直接切换，不必打开编辑弹窗）
-const statusOptions = computed(() => STATUSES.map(s => ({ label: s, key: s, disabled: p.value?.status === s })))
+const statusOptions = computed(() => STATUSES.value.map(s => ({ label: s, key: s, disabled: p.value?.status === s })))
 async function changeStatus(key) {
   const v = p.value
   try {
@@ -318,19 +340,32 @@ async function unlink(contractId) {
   await load()
 }
 
-// 新增回款（与收费台账的弹窗保持一致：日期默认今天，字段相同；可指定所属合同）
+// 开票 / 确认收款两段式（v1.1）：先登记开票（发票号+开票日期），钱到账后再确认收款
 const showReceipt = ref(false)
-const rf = ref({ date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null })
+const rf = ref({ date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null, invoiceNo: '' })
 function openReceipt() {
-  rf.value = { date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null }
+  rf.value = { date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', contractId: null, invoiceNo: '' }
   showReceipt.value = true
 }
 async function addReceipt() {
-  if (!rf.value.date || !rf.value.amount) { message.warning('请填写日期和金额'); return }
+  if (!rf.value.date || !rf.value.amount) { message.warning('请填写开票日期和金额'); return }
   try {
     await api.post(`/projects/${id}/receipts`, rf.value)
-    message.success('回款已登记')
+    message.success('开票已登记（待收款）')
     showReceipt.value = false
+    await load()
+  } catch (e) { message.error(errMsg(e)) }
+}
+// 确认收款：选到账日期 → 该笔变为已收款
+const showConfirm = ref(false)
+const cfRow = ref(null)
+const cfDate = ref(todayStr())
+function openConfirm(r) { cfRow.value = r; cfDate.value = todayStr(); showConfirm.value = true }
+async function doConfirm() {
+  try {
+    await api.post(`/projects/${id}/receipts/${cfRow.value.id}/confirm`, { receivedDate: cfDate.value })
+    message.success('已确认收款')
+    showConfirm.value = false
     await load()
   } catch (e) { message.error(errMsg(e)) }
 }
@@ -341,13 +376,18 @@ async function delReceipt(rid) {
 }
 
 const receiptColumns = [
-  { title: '收款日期', key: 'date', width: 110 },
+  { title: '开票日期', key: 'date', width: 102 },
+  { title: '发票号', key: 'invoiceNo', width: 128, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
-  { title: '所属合同', key: 'contractNo', width: 130, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
-  { title: '方式', key: 'method', width: 100 },
-  { title: '经办人', key: 'handler', width: 90 },
-  { title: '备注', key: 'note' },
-  { title: '', key: 'act', width: 46, render: (r) => iconBtn('trash', 'red', '删除收款', () => delReceipt(r.id)) }
+  { title: '所属合同', key: 'contractNo', width: 120, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
+  { title: '状态', key: 'isReceived', width: 148, render: (r) => r.isReceived
+      ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
+      : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
+  { title: '备注', key: 'note', ellipsis: { tooltip: true } },
+  { title: '', key: 'act', width: 78, render: (r) => h('span', { style: 'display:inline-flex;gap:2px' }, [
+      r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)),
+      iconBtn('trash', 'red', '删除', () => delReceipt(r.id))
+    ]) }
 ]
 </script>
 
@@ -365,7 +405,7 @@ const receiptColumns = [
             <span class="rpt-chip">报告编号：{{ p.reportNo || '—' }}</span>
           </div>
           <div class="d-title">{{ p.name }}</div>
-          <div class="small mut" style="margin-top:6px">{{ p.client }}<span v-if="p.contactName"> · 联系人 {{ p.contactName }}<span v-if="p.contactPhone"> {{ p.contactPhone }}</span></span> · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}</div>
+          <div class="small mut" style="margin-top:6px">{{ p.client }}<span v-if="p.contactName"> · 联系人 {{ p.contactName }}<span v-if="p.contactPhone"> {{ p.contactPhone }}</span></span> · 负责人 {{ p.ownerName || '—' }} · 承接 {{ p.acceptedDate || '—' }}<span v-if="p.createdBy"> · 创建 {{ p.createdBy }} · {{ (p.createdAt || '').slice(0, 10) }}</span></div>
         </div>
         <n-button @click="openEdit">编辑项目</n-button>
         <n-dropdown :options="statusOptions" @select="changeStatus"><n-button type="primary">更改状态</n-button></n-dropdown>
@@ -411,6 +451,11 @@ const receiptColumns = [
             </div>
           </div>
         </div>
+        <div v-if="d.team.length" style="display:flex;justify-content:flex-end;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid var(--line-soft)" class="small">
+          <span class="mut">占比合计</span>
+          <b class="num" :style="{ color: shareTotal === 100 ? '#1f7a4d' : '#c26a12' }">{{ fmt(shareTotal) }}%</b>
+          <span v-if="shareTotal !== 100" class="faint">（合计应为 100%）</span>
+        </div>
       </div>
 
       <div class="card">
@@ -421,17 +466,19 @@ const receiptColumns = [
           <div class="fring sm">
             <svg width="76" height="76" viewBox="0 0 96 96">
               <circle class="bgc" cx="48" cy="48" r="40" />
-              <circle class="vlc" cx="48" cy="48" r="40" stroke-dasharray="251.3" :stroke-dashoffset="ringOffset" />
+              <circle cx="48" cy="48" r="40" fill="none" stroke="#e8862e" stroke-width="9" :stroke-dasharray="invArc + ' ' + RING_C" :stroke-dashoffset="-recvArc" />
+              <circle class="vlc" cx="48" cy="48" r="40" :stroke-dasharray="recvArc + ' ' + RING_C" stroke-dashoffset="0" />
             </svg>
-            <div class="fring-t"><b class="num" style="font-size:16px">{{ feePct }}%</b><span>收款进度</span></div>
+            <div class="fring-t"><b class="num" style="font-size:16px">{{ feePct }}%</b><span>已收进度</span></div>
           </div>
           <div class="fee-stats" style="gap:18px">
             <div><span>咨询费应收</span><b class="num">{{ fmt(p.fee) }} 万</b></div>
-            <div><span>已收</span><b class="num">{{ fmt(received) }} 万</b></div>
+            <div><span>已开票</span><b class="num" style="color:#c26a12">{{ fmt(invoiced) }} 万</b></div>
+            <div><span>已收</span><b class="num" style="color:#1f7a4d">{{ fmt(received) }} 万</b></div>
             <div><span>待收</span><b class="num neg">{{ fmt(Math.max(p.fee - received, 0)) }} 万</b></div>
           </div>
         </div>
-        <div class="small mut" style="margin-top:10px">{{ d.contracts.length }} 份合同<span v-if="contractAmount != null"> · 合同金额 {{ contractAmount === '按实结算' ? '按实结算' : fmt(contractAmount) + ' 万' }}</span> · 最近收款 {{ lastReceipt ? lastReceipt.date + ' · ' + fmt(lastReceipt.amount) + ' 万元' : '暂无' }}</div>
+        <div class="small mut" style="margin-top:10px">{{ d.contracts.length }} 份合同<span v-if="contractAmount != null"> · 合同金额 {{ contractAmount === '按实结算' ? '按实结算' : fmt(contractAmount) + ' 万' }}</span> · 最近开票 {{ lastReceipt ? lastReceipt.date + ' · ' + fmt(lastReceipt.amount) + ' 万元' + (lastReceipt.isReceived ? '（已收）' : '（待收）') : '暂无' }}</div>
         <div style="margin-top:6px">
           <div v-if="!d.contracts.length" class="faint small" style="padding:6px 0 12px">暂未关联合同，点右上角「关联合同」添加（合同金额在合同管理中维护）。</div>
           <div v-for="c in d.contracts" :key="c.id" style="padding:9px 0;border-top:1px solid var(--line-soft)">
@@ -455,9 +502,9 @@ const receiptColumns = [
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">收款记录</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button></div>
-          <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="540" />
-          <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无收款记录</div>
+          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">开票与收款</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button></div>
+          <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="700" />
+          <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无开票记录</div>
         </div>
       </div>
     </div>
@@ -520,7 +567,7 @@ const receiptColumns = [
         </div>
 
         <div class="card">
-          <div class="card-h"><span class="card-ic b"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><h3>项目资料</h3></div>
+          <div class="card-h"><span class="card-ic tl"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><h3>项目资料</h3></div>
           <div class="small faint" style="margin-bottom:4px">图纸、隐蔽资料、联系函等过程文件按分类归档，与成果文件分开保存。</div>
           <div class="doc-cat" v-for="g in docGroups" :key="g.cat">
             <div style="display:flex;align-items:center;gap:9px;cursor:pointer;padding:3px 0" @click="openDocCat = openDocCat === g.cat ? '' : g.cat">
@@ -533,6 +580,7 @@ const receiptColumns = [
               <div class="doc-f" v-for="f in g.files" :key="f.id">
                 <span style="flex:1;min-width:0">{{ f.fileName }}</span>
                 <span class="faint">{{ String(f.uploadedAt).slice(0, 10) }}</span>
+                <button class="icbtn b-violet" title="更改分类" @click="openDocCatEdit(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></button>
                 <button v-if="fileKind(f.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('docs', f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 <button class="icbtn b-slate" title="下载" @click="downloadFile('docs', f.id, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                 <button class="icbtn b-red" title="删除" @click="confirmDelete('删除该资料文件？', async () => { await api.delete(`/projects/${id}/files/docs/${f.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -627,10 +675,11 @@ const receiptColumns = [
       </template>
     </n-modal>
 
-    <!-- 新增回款（与收费台账一致） -->
-    <n-modal v-model:show="showReceipt" preset="card" title="新增回款" style="width:480px;border-radius:16px">
+    <!-- 新增开票（登记发票，确认收款是后续第二步） -->
+    <n-modal v-model:show="showReceipt" preset="card" title="新增开票" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
-        <n-form-item label="回款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+        <n-form-item label="开票日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+        <n-form-item label="发票号"><n-input v-model:value="rf.invoiceNo" placeholder="发票号码（可后补）" /></n-form-item>
         <n-form-item label="金额（万元）"><n-input-number v-model:value="rf.amount" :min="0" style="width:100%" /></n-form-item>
         <n-form-item label="所属合同（可选）">
           <n-select v-model:value="rf.contractId" clearable :options="d.contracts.map(c => ({ label: c.no + ' · ' + c.name, value: c.id }))" placeholder="未指定合同" />
@@ -641,10 +690,39 @@ const receiptColumns = [
         </n-grid>
         <n-form-item label="备注"><n-input v-model:value="rf.note" /></n-form-item>
       </n-form>
+      <p class="small faint">登记后状态为「已开票 · 待收款」；钱到账后在列表里点 ✓「确认收款」。</p>
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <n-button @click="showReceipt = false">取消</n-button>
-          <n-button type="primary" @click="addReceipt">保存回款</n-button>
+          <n-button type="primary" @click="addReceipt">保存开票</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <!-- 确认收款 -->
+    <n-modal v-model:show="showConfirm" preset="card" title="确认收款" style="width:400px;border-radius:16px">
+      <p class="small mut" style="margin:0 0 12px">确认这笔 {{ cfRow ? fmt(cfRow.amount) : '' }} 万元已经到账？</p>
+      <n-form label-placement="top">
+        <n-form-item label="到账日期"><n-date-picker v-model:formatted-value="cfDate" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+      </n-form>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <n-button @click="showConfirm = false">取消</n-button>
+          <n-button type="primary" @click="doConfirm">确认到账</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <!-- 更改资料分类 -->
+    <n-modal v-model:show="showDocCat" preset="card" title="更改分类" style="width:400px;border-radius:16px">
+      <n-form label-placement="top">
+        <n-form-item label="文件名"><span class="small">{{ dcFile?.fileName }}</span></n-form-item>
+        <n-form-item label="改到分类"><n-select v-model:value="dcCat" :options="DOC_CATS.map(t => ({ label: t, value: t }))" /></n-form-item>
+      </n-form>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <n-button @click="showDocCat = false">取消</n-button>
+          <n-button type="primary" @click="saveDocCat">保存</n-button>
         </div>
       </template>
     </n-modal>

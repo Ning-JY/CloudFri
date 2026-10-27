@@ -1,17 +1,19 @@
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { NButton, useMessage, useDialog } from 'naive-ui'
+import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import api, { errMsg } from '../api'
 import { fmt, fmtSize, todayStr, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
+import { useDicts } from '../stores/dicts'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const id = Number(route.params.id)
-const TYPES = ['框架合同', '单项合同', '补充协议']
+const dicts = useDicts()
+const TYPES = computed(() => dicts.names('ContractType'))
 
 const d = ref(null)
 const allProjects = ref([])
@@ -40,6 +42,14 @@ async function save() {
     showForm.value = false
     await load()
   } catch (e) { message.error(errMsg(e)) }
+}
+// 删除合同（与项目台账同口径：删除统一在详情页）
+function delContract() {
+  dialog.error({ title: '删除合同', content: `确定删除合同「${c.value.name}」？其与项目的关联将一并解除，附件文件一并删除，不可恢复。`, positiveText: '删除', negativeText: '取消',
+    onPositiveClick: async () => {
+      try { await api.delete('/contracts/' + id); message.success('合同已删除'); router.push('/contracts') }
+      catch (e) { message.error(errMsg(e)) }
+    } })
 }
 
 // 附件：可多选上传多个
@@ -93,20 +103,33 @@ async function unlink(pid) {
   await load()
 }
 
-// 新增回款（挂到本页合同名下，必须从关联项目中选一个）
+// 新增开票（挂到本合同名下，必须从关联项目中选一个；确认收款在列表里做，与项目详情同一流程）
 const showReceipt = ref(false)
-const rf = ref({ projectId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' })
+const rf = ref({ projectId: null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', invoiceNo: '' })
 function openReceipt() {
-  rf.value = { projectId: d.value.projects.length === 1 ? d.value.projects[0].id : null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '' }
+  rf.value = { projectId: d.value.projects.length === 1 ? d.value.projects[0].id : null, date: todayStr(), amount: null, method: '银行转账', handler: '', note: '', invoiceNo: '' }
   showReceipt.value = true
 }
 async function addReceipt() {
-  if (!rf.value.projectId) { message.warning('请选择收款所属项目'); return }
-  if (!rf.value.date || !rf.value.amount) { message.warning('请填写日期和金额'); return }
+  if (!rf.value.projectId) { message.warning('请选择开票所属项目'); return }
+  if (!rf.value.date || !rf.value.amount) { message.warning('请填写开票日期和金额'); return }
   try {
     await api.post(`/projects/${rf.value.projectId}/receipts`, { ...rf.value, contractId: id })
-    message.success('回款已登记')
+    message.success('开票已登记（待收款）')
     showReceipt.value = false
+    await load()
+  } catch (e) { message.error(errMsg(e)) }
+}
+// 确认收款（与项目详情页同一接口）
+const showConfirm = ref(false)
+const cfRow = ref(null)
+const cfDate = ref(todayStr())
+function openConfirm(r) { cfRow.value = r; cfDate.value = todayStr(); showConfirm.value = true }
+async function doConfirm() {
+  try {
+    await api.post(`/projects/${cfRow.value.projectId}/receipts/${cfRow.value.id}/confirm`, { receivedDate: cfDate.value })
+    message.success('已确认收款')
+    showConfirm.value = false
     await load()
   } catch (e) { message.error(errMsg(e)) }
 }
@@ -118,19 +141,23 @@ const projectColumns = [
   { title: '状态', key: 'status', width: 92 },
   { title: '咨询费应收（万元）', key: 'fee', width: 130, align: 'right', render: (r) => fmt(r.fee) },
   { title: '该项目已收（万元）', key: 'receivedTotal', width: 130, align: 'right', render: (r) => fmt(r.receivedTotal) },
-  { title: '其中本 合同名下（万元）', key: 'contractReceived', width: 150, align: 'right', render: (r) => fmt(r.contractReceived) },
+  { title: '其中本合同已收（万元）', key: 'contractReceived', width: 140, align: 'right', render: (r) => fmt(r.contractReceived) },
+  { title: '其中本合同已开票（万元）', key: 'contractInvoiced', width: 150, align: 'right', render: (r) => fmt(r.contractInvoiced) },
   { title: '操作', key: 'act', width: 96, render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('eye', 'blue', '项目详情', () => router.push('/projects/' + r.id)),
     iconBtn('unlink', 'red', '取消关联', () => unlink(r.id))
   ]) }
 ]
 const receiptColumns = [
-  { title: '收款日期', key: 'date', width: 110 },
+  { title: '开票日期', key: 'date', width: 102 },
+  { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
   { title: '所属项目', key: 'projectName', ellipsis: { tooltip: true }, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
-  { title: '方式', key: 'method', width: 100 },
-  { title: '经办人', key: 'handler', width: 90 },
-  { title: '备注', key: 'note' }
+  { title: '状态', key: 'isReceived', width: 148, render: (r) => r.isReceived
+      ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
+      : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
+  { title: '备注', key: 'note', ellipsis: { tooltip: true } },
+  { title: '', key: 'act', width: 46, render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)) }
 ]
 </script>
 
@@ -146,15 +173,16 @@ const receiptColumns = [
             <n-tag size="small" type="success" :bordered="false">{{ c.status || '—' }}</n-tag>
           </div>
           <div class="d-title">{{ c.name }}</div>
-          <div class="small mut" style="margin-top:6px">甲方 {{ c.partyA || '—' }} · 签订 {{ c.signDate || '—' }}</div>
+          <div class="small mut" style="margin-top:6px">甲方 {{ c.partyA || '—' }} · 签订 {{ c.signDate || '—' }}<span v-if="c.createdBy"> · 创建 {{ c.createdBy }} · {{ (c.createdAt || '').slice(0, 10) }}</span></div>
         </div>
         <n-button @click="openEdit">编辑合同</n-button>
+        <n-button type="error" ghost @click="delContract">删除合同</n-button>
       </div>
       <div class="d-amounts" style="grid-template-columns:repeat(3,1fr)">
         <div class="a t0"><span class="a-ic t0"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
           <div style="flex:1;min-width:0"><div class="lb">合同金额</div><div class="vl num">{{ c.amount == null ? '按实结算' : fmt(c.amount) + ' 万' }}</div><div class="sb">{{ c.amountNote || '合同约定' }}</div></div></div>
         <div class="a t1"><span class="a-ic t1"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span>
-          <div style="flex:1;min-width:0"><div class="lb">本合同名下已收</div><div class="vl num">{{ fmt(d.receivedTotal) }} 万</div><div class="sb">登记回款时指定本 合同的收款合计</div></div></div>
+          <div style="flex:1;min-width:0"><div class="lb">本合同名下已收</div><div class="vl num">{{ fmt(d.receivedTotal) }} 万</div><div class="sb">已开票 {{ fmt(d.invoicedTotal) }} 万 · 待收 {{ fmt(Math.max((d.invoicedTotal || 0) - (d.receivedTotal || 0), 0)) }} 万</div></div></div>
         <div class="a t3"><span class="a-ic t3"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
           <div style="flex:1;min-width:0"><div class="lb">关联项目</div><div class="vl num">{{ d.projects.length }} <small style="font-size:13px">个</small></div><div class="sb">一本合同可关联多个项目</div></div></div>
       </div>
@@ -178,12 +206,12 @@ const receiptColumns = [
       </div>
 
       <div class="card">
-        <div class="card-h"><span class="card-ic o"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><h3>本合同收款</h3><div class="sp"></div>
-          <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增回款</n-button>
+        <div class="card-h"><span class="card-ic o"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><h3>本合同开票与收款</h3><div class="sp"></div>
+          <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button>
         </div>
-        <div class="small mut" style="margin-bottom:6px">合计 <b class="num">{{ fmt(d.receivedTotal) }}</b> 万元 · {{ d.receipts.length }} 笔（仅统计登记时指定了本 合同的收款）</div>
-        <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="640" />
-        <div v-else class="faint small" style="padding:8px 0">暂无挂在本 合同名下的收款。在项目详情或收费台账登记回款时选择「所属合同」即可归到这里。</div>
+        <div class="small mut" style="margin-bottom:6px">已开票 <b class="num">{{ fmt(d.invoicedTotal) }}</b> 万元 · 已收 <b class="num">{{ fmt(d.receivedTotal) }}</b> 万元 · {{ d.receipts.length }} 笔（仅统计登记时指定了本合同的记录）</div>
+        <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="760" />
+        <div v-else class="faint small" style="padding:8px 0">暂无挂在本合同名下的开票。在项目详情或收费台账登记开票时选择「所属合同」即可归到这里。</div>
       </div>
     </div>
 
@@ -236,12 +264,13 @@ const receiptColumns = [
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showReceipt" preset="card" title="新增回款（本合同）" style="width:480px;border-radius:16px">
+    <n-modal v-model:show="showReceipt" preset="card" title="新增开票（本合同）" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
         <n-form-item label="所属项目">
           <n-select v-model:value="rf.projectId" :options="d.projects.map(p => ({ label: p.code + ' · ' + p.name, value: p.id }))" placeholder="从关联项目中选择" />
         </n-form-item>
-        <n-form-item label="回款日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+        <n-form-item label="开票日期"><n-date-picker v-model:formatted-value="rf.date" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+        <n-form-item label="发票号"><n-input v-model:value="rf.invoiceNo" placeholder="发票号码（可后补）" /></n-form-item>
         <n-form-item label="金额（万元）"><n-input-number v-model:value="rf.amount" :min="0" style="width:100%" /></n-form-item>
         <n-grid :cols="2" :x-gap="12">
           <n-form-item-gi label="方式"><n-select v-model:value="rf.method" :options="['银行转账', '现金', '承兑汇票', '其他'].map(t => ({ label: t, value: t }))" /></n-form-item-gi>
@@ -252,7 +281,20 @@ const receiptColumns = [
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <n-button @click="showReceipt = false">取消</n-button>
-          <n-button type="primary" @click="addReceipt">保存回款</n-button>
+          <n-button type="primary" @click="addReceipt">保存开票</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showConfirm" preset="card" title="确认收款" style="width:400px;border-radius:16px">
+      <p class="small mut" style="margin:0 0 12px">确认这笔 {{ cfRow ? fmt(cfRow.amount) : '' }} 万元已经到账？</p>
+      <n-form label-placement="top">
+        <n-form-item label="到账日期"><n-date-picker v-model:formatted-value="cfDate" value-format="yyyy-MM-dd" type="date" style="width:100%" /></n-form-item>
+      </n-form>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <n-button @click="showConfirm = false">取消</n-button>
+          <n-button type="primary" @click="doConfirm">确认到账</n-button>
         </div>
       </template>
     </n-modal>

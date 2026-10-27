@@ -11,6 +11,9 @@ public class User
     public int? MemberId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+    /// <summary>最后一次登录成功的时间与来源 IP（登录时写入，账号管理展示）。</summary>
+    public DateTime? LastLoginAt { get; set; }
+    public string? LastLoginIp { get; set; }
 }
 
 /// <summary>成员名单（负责人/团队成员）。Gender: M / F，用于头像。</summary>
@@ -56,6 +59,8 @@ public class Project
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
+    /// <summary>创建人（登录账号显示名，新建时写入）。</summary>
+    public string? CreatedBy { get; set; }
 }
 
 /// <summary>项目团队分工。Role：项目负责人/编制人/审核人/审定人/配合人员。Duty 为人员职责说明。Share 为工作占比 %。</summary>
@@ -82,6 +87,8 @@ public class Contract
     public DateOnly? SignDate { get; set; }
     public string? Status { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+    /// <summary>创建人（登录账号显示名，新建时写入）。</summary>
+    public string? CreatedBy { get; set; }
 }
 
 /// <summary>项目-合同多对多关联。IsPrimary 标记主合同。</summary>
@@ -104,6 +111,11 @@ public class Receipt
     public string? Method { get; set; }
     public string? Handler { get; set; }
     public string? Note { get; set; }
+    /// <summary>开票/收款两段式（v1.1，仿 EnterpriseMS）：登记时为开票（Date=开票日期、InvoiceNo=发票号），
+    /// 确认收款后 IsReceived=true 并记 ReceivedDate；「已收」汇总只计 IsReceived 的记录。</summary>
+    public string? InvoiceNo { get; set; }
+    public bool IsReceived { get; set; }
+    public DateOnly? ReceivedDate { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }
 
@@ -209,6 +221,9 @@ public class LibraryDoc
     public string Name { get; set; } = "";
     public string Category { get; set; } = "规章制度";
     public string? Format { get; set; }
+    /// <summary>置顶（列表排最前）与资料说明（v1.1）。</summary>
+    public bool IsPinned { get; set; }
+    public string? Description { get; set; }
     public string StoredPath { get; set; } = "";
     public long SizeBytes { get; set; }
     public string? UploadedBy { get; set; }

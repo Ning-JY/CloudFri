@@ -37,6 +37,12 @@ public class AuthController : ControllerBase
             is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded;
         if (!ok) return Unauthorized(new { message = "用户名或密码不正确" });
 
+        // 记录最后登录时间与来源 IP（优先反向代理 X-Forwarded-For 的首段）
+        user.LastLoginAt = DateTime.Now;
+        var xff = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        user.LastLoginIp = !string.IsNullOrWhiteSpace(xff) ? xff.Split(',')[0].Trim() : HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _db.SaveChangesAsync();
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_cfg["Jwt:Key"] ?? "dev-only-key-change-in-production-0123456789abcdef"));
         var token = new JwtSecurityToken(
             issuer: _cfg["Jwt:Issuer"] ?? "CloudFri",

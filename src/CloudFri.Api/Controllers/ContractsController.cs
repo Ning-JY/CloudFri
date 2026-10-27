@@ -37,7 +37,7 @@ public class ContractsController : ControllerBase
         var rows = await query.OrderByDescending(x => x.SignDate).ThenByDescending(x => x.Id)
             .Select(c => new
             {
-                c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status,
+                c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status, c.CreatedBy, c.CreatedAt,
                 FileCount = _db.ContractFiles.Count(f => f.ContractId == c.Id),
                 ProjectCount = _db.ProjectContracts.Count(pc => pc.ContractId == c.Id),
                 Projects = _db.ProjectContracts.Where(pc => pc.ContractId == c.Id)
@@ -65,23 +65,25 @@ public class ContractsController : ControllerBase
                               {
                                   p.Id, p.Code, p.Name, p.Client, p.BizType, p.Status, p.Fee,
                                   pc.IsPrimary,
-                                  ReceivedTotal = _db.Receipts.Where(r => r.ProjectId == p.Id).Sum(r => (decimal?)r.Amount) ?? 0,
-                                  ContractReceived = _db.Receipts.Where(r => r.ProjectId == p.Id && r.ContractId == id).Sum(r => (decimal?)r.Amount) ?? 0
+                                  ReceivedTotal = _db.Receipts.Where(r => r.ProjectId == p.Id && r.IsReceived).Sum(r => (decimal?)r.Amount) ?? 0,
+                                  ContractReceived = _db.Receipts.Where(r => r.ProjectId == p.Id && r.ContractId == id && r.IsReceived).Sum(r => (decimal?)r.Amount) ?? 0,
+                                  ContractInvoiced = _db.Receipts.Where(r => r.ProjectId == p.Id && r.ContractId == id).Sum(r => (decimal?)r.Amount) ?? 0
                               }).ToListAsync();
 
         var receipts = await (from r in _db.Receipts
                               join p in _db.Projects on r.ProjectId equals p.Id
                               where r.ContractId == id
                               orderby r.Date
-                              select new { r.Id, r.ProjectId, ProjectCode = p.Code, ProjectName = p.Name, r.Date, r.Amount, r.Method, r.Handler, r.Note }).ToListAsync();
+                              select new { r.Id, r.ProjectId, ProjectCode = p.Code, ProjectName = p.Name, r.Date, r.Amount, r.Method, r.Handler, r.Note, r.InvoiceNo, r.IsReceived, r.ReceivedDate }).ToListAsync();
 
         return Ok(new
         {
-            Contract = new { c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status, c.CreatedAt },
+            Contract = new { c.Id, c.No, c.Name, c.Type, c.PartyA, c.Amount, c.AmountNote, c.SignDate, c.Status, c.CreatedAt, c.CreatedBy },
             Files = files,
             Projects = projects,
             Receipts = receipts,
-            ReceivedTotal = receipts.Sum(r => r.Amount)
+            ReceivedTotal = receipts.Where(r => r.IsReceived).Sum(r => r.Amount),
+            InvoicedTotal = receipts.Sum(r => r.Amount)
         });
     }
 
@@ -93,7 +95,8 @@ public class ContractsController : ControllerBase
         var c = new Contract
         {
             No = req.No, Name = req.Name, Type = req.Type, PartyA = req.PartyA,
-            Amount = req.Amount, AmountNote = req.AmountNote, SignDate = req.SignDate, Status = req.Status
+            Amount = req.Amount, AmountNote = req.AmountNote, SignDate = req.SignDate, Status = req.Status,
+            CreatedBy = User.DisplayName()
         };
         _db.Contracts.Add(c);
         await _db.SaveChangesAsync();
@@ -214,7 +217,8 @@ public class FeesController : ControllerBase
             .Select(p => new
             {
                 p.Id, p.Code, p.Name, p.Client, p.Status, p.Fee,
-                Received = _db.Receipts.Where(r => r.ProjectId == p.Id).Sum(r => (decimal?)r.Amount) ?? 0,
+                Received = _db.Receipts.Where(r => r.ProjectId == p.Id && r.IsReceived).Sum(r => (decimal?)r.Amount) ?? 0,
+                Invoiced = _db.Receipts.Where(r => r.ProjectId == p.Id).Sum(r => (decimal?)r.Amount) ?? 0,
                 LastReceiptDate = _db.Receipts.Where(r => r.ProjectId == p.Id).Max(r => (DateOnly?)r.Date),
                 ReceiptCount = _db.Receipts.Count(r => r.ProjectId == p.Id)
             }).ToListAsync();
@@ -244,12 +248,12 @@ public class FeesController : ControllerBase
         var rows = await query.OrderByDescending(x => x.r.Date).ThenByDescending(x => x.r.Id)
             .Select(x => new
             {
-                x.r.Id, x.r.Date, x.r.Amount, x.r.Method, x.r.Handler, x.r.Note,
+                x.r.Id, x.r.Date, x.r.Amount, x.r.Method, x.r.Handler, x.r.Note, x.r.InvoiceNo, x.r.IsReceived, x.r.ReceivedDate,
                 x.r.ProjectId, ProjectCode = x.p.Code, ProjectName = x.p.Name,
                 x.r.ContractId,
                 ContractNo = x.c != null ? x.c.No : null,
                 ContractName = x.c != null ? x.c.Name : null
             }).ToListAsync();
-        return Ok(new { rows, total = rows.Sum(x => x.Amount), count = rows.Count });
+        return Ok(new { rows, total = rows.Sum(x => x.Amount), receivedTotal = rows.Where(x => x.IsReceived).Sum(x => x.Amount), count = rows.Count });
     }
 }
