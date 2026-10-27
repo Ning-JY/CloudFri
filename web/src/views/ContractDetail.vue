@@ -3,10 +3,18 @@ import { ref, computed, onMounted, h } from 'vue'
 import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, todayStr, iconBtn } from '../utils'
+import { fmt, fmtSize, todayStr, iconBtn, thUnit, nameCell } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import UploadBtn from '../components/UploadBtn.vue'
+import { usePager } from '../composables/usePager'
+
+const pagerProj = usePager()
+const pagerRec = usePager()
+const pagedProjects = computed(() => d.value ? pagerProj.slice(d.value.projects) : [])
+const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) : [])
 
 const route = useRoute()
 const router = useRouter()
@@ -53,24 +61,11 @@ function delContract() {
     } })
 }
 
-// 附件：可多选上传多个
-function pickFiles(cb, multiple = true) {
-  const inp = document.createElement('input')
-  inp.type = 'file'
-  if (multiple) inp.multiple = true
-  inp.onchange = () => { if (inp.files.length) cb([...inp.files]) }
-  inp.click()
-}
-async function uploadFiles(files) {
-  try {
-    for (const f of files) {
-      const fd = new FormData()
-      fd.append('file', f)
-      await api.post(`/contracts/${id}/files`, fd)
-    }
-    message.success(files.length > 1 ? `已上传 ${files.length} 个附件` : '附件已上传')
-    await load()
-  } catch (e) { message.error(errMsg(e, '上传失败')) }
+// 附件：可多选上传（带进度，走全站共用 UploadBtn，逐个文件上传）
+async function uploadOne(file, onProgress) {
+  const fd = new FormData()
+  fd.append('file', file)
+  await api.post(`/contracts/${id}/files`, fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
 }
 async function downloadFile(f) {
   const { data } = await api.get(`/contracts/${id}/files/${f.id}/download`, { responseType: 'blob' })
@@ -137,13 +132,13 @@ async function doConfirm() {
 
 const PROJECT_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
-  { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
+  { title: '项目名称', key: 'name', render: (r) => h('div', [h('div', { class: 'pname' }, [nameCell(r.name)]), h('div', { class: 'psub' }, r.client)]) },
   { title: '主合同', key: 'primary', width: 76, exportValue: (r) => r.isPrimary ? '主合同' : '', render: (r) => r.isPrimary ? h('span', { class: 'role-tag' }, '主合同') : '' },
   { title: '状态', key: 'status', width: 92 },
-  { title: '咨询费应收（万元）', key: 'fee', width: 130, align: 'right', render: (r) => fmt(r.fee) },
-  { title: '该项目已收（万元）', key: 'receivedTotal', width: 130, align: 'right', render: (r) => fmt(r.receivedTotal) },
-  { title: '其中本合同已收（万元）', key: 'contractReceived', width: 140, align: 'right', render: (r) => fmt(r.contractReceived) },
-  { title: '其中本合同已开票（万元）', key: 'contractInvoiced', width: 150, align: 'right', render: (r) => fmt(r.contractInvoiced) },
+  { title: thUnit('咨询费应收'), titleText: '咨询费应收（万元）', key: 'fee', width: 130, align: 'right', render: (r) => fmt(r.fee) },
+  { title: thUnit('该项目已收'), titleText: '该项目已收（万元）', key: 'receivedTotal', width: 130, align: 'right', render: (r) => fmt(r.receivedTotal) },
+  { title: thUnit('其中本合同已收'), titleText: '其中本合同已收（万元）', key: 'contractReceived', width: 140, align: 'right', render: (r) => fmt(r.contractReceived) },
+  { title: thUnit('其中本合同已开票'), titleText: '其中本合同已开票（万元）', key: 'contractInvoiced', width: 150, align: 'right', render: (r) => fmt(r.contractInvoiced) },
   { title: '操作', key: 'act', width: 96, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('eye', 'blue', '项目详情', () => router.push('/projects/' + r.id)),
     iconBtn('unlink', 'red', '取消关联', () => unlink(r.id))
@@ -154,8 +149,8 @@ const projectColumns = computed(() => PROJECT_COLUMNS.filter(c => projectVisible
 const RECEIPT_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
-  { title: '所属项目', key: 'projectName', ellipsis: { tooltip: true }, exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
-  { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
+  { title: '所属项目', key: 'projectName', exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('div', { style: 'display:flex;gap:4px;min-width:0;align-items:baseline' }, [h('span', { class: 'num faint', style: 'flex:none' }, r.projectCode), h('div', { style: 'flex:1;min-width:0' }, [nameCell(r.projectName)])]) },
+  { title: thUnit('金额'), titleText: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
   { title: '状态', key: 'isReceived', width: 148, exportValue: (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款', render: (r) => r.isReceived
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
@@ -196,7 +191,7 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
     <div class="d-top2">
       <div class="card">
         <div class="card-h"><span class="card-ic g"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span><h3>合同附件</h3><div class="sp"></div>
-          <n-button size="small" type="primary" @click="pickFiles(uploadFiles)">+ 上传附件（可多选）</n-button>
+          <UploadBtn label="上传附件（可多选）" type="primary" multiple :upload="uploadOne" @done="load" />
         </div>
         <div v-if="!d.files.length" class="faint small">暂无附件，点右上角上传合同扫描件、电子版等，可一次多选多个文件。</div>
         <div v-for="f in d.files" :key="f.id" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line-soft)">
@@ -216,7 +211,8 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
           <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button>
         </div>
         <div class="small mut" style="margin-bottom:6px">已开票 <b class="num">{{ fmt(d.invoicedTotal) }}</b> 万元 · 已收 <b class="num">{{ fmt(d.receivedTotal) }}</b> 万元 · {{ d.receipts.length }} 笔（仅统计登记时指定了本合同的记录）</div>
-        <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="760" />
+        <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="pagedReceipts" :scroll-x="760" :pagination="false" />
+        <Pager v-if="d.receipts.length" v-model:page="pagerRec.page.value" v-model:page-size="pagerRec.pageSize.value" :total="d.receipts.length" />
         <div v-else class="faint small" style="padding:8px 0">暂无挂在本合同名下的开票。在项目详情或收费台账登记开票时选择「所属合同」即可归到这里。</div>
       </div>
     </div>
@@ -226,7 +222,8 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
         <TableTools v-model="projectVisibleKeys" :cols="PROJECT_COLUMNS" :rows="d.projects" filename="关联项目" storage-key="cd-projects" />
         <n-button size="small" :type="d.projects.length ? 'default' : 'primary'" @click="openLink">关联项目</n-button>
       </div>
-      <n-data-table v-if="d.projects.length" size="small" :bordered="false" :columns="projectColumns" :data="d.projects" :scroll-x="900" />
+      <n-data-table v-if="d.projects.length" size="small" :bordered="false" :columns="projectColumns" :data="pagedProjects" :scroll-x="900" :pagination="false" />
+      <Pager v-if="d.projects.length" v-model:page="pagerProj.page.value" v-model:page-size="pagerProj.pageSize.value" :total="d.projects.length" />
       <div v-else class="faint small">暂未关联项目，点右上角「关联项目」添加（框架合同可挂多个项目）。</div>
     </div>
 

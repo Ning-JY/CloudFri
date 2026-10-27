@@ -1,5 +1,17 @@
 // 图标操作按钮（列表/卡片行内操作）：图形 SVG + 按动作区分颜色，渲染函数里用 h 构造。
 import { h } from 'vue'
+import { NEllipsis } from 'naive-ui'
+
+// 金额列表头：名称 + 单位分开渲染——单位不用括号，用 .th-unit 橙色小字显示（如「造价 万元」）。
+// 用了函数标题的列必须同时给 titleText 纯文本，供 TableTools 的列勾选名单与 Excel 导出表头使用。
+export function thUnit(label, unit = '万元') {
+  return () => h('span', [label, h('span', { class: 'th-unit' }, unit)])
+}
+
+// 名称单元格：单行省略，悬停显示完整名称（tooltip）。长名称列统一用它，别再用裸文本或列级 ellipsis。
+export function nameCell(text) {
+  return h(NEllipsis, { tooltip: { width: 360, scrollable: true, maxHeight: 240 } }, { default: () => text ?? '' })
+}
 export const ICONS = {
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
   pencil: '<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
@@ -89,10 +101,15 @@ export function statusType(status) {
 export function fileKind(name) {
   const ext = String(name || '').split('.').pop().toUpperCase()
   if (ext === 'PDF') return 'pdf'
-  if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP'].includes(ext)) return 'img'
+  if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP', 'SVG'].includes(ext)) return 'img'
   if (ext === 'DOCX') return 'docx'
-  if (['XLSX', 'CSV'].includes(ext)) return 'sheet'
-  if (['TXT', 'LOG', 'MD'].includes(ext)) return 'text'
+  if (['XLSX', 'XLS', 'CSV'].includes(ext)) return 'sheet'
+  if (ext === 'PPTX') return 'pptx'
+  if (['TIF', 'TIFF'].includes(ext)) return 'tif'
+  if (ext === 'MD') return 'md'
+  if (['TXT', 'LOG'].includes(ext)) return 'text'
+  if (['ZIP', 'RAR', '7Z', 'TAR', 'GZ', 'TGZ', 'BZ2', 'XZ'].includes(ext)) return 'archive'
+  if (['JSON', 'JS', 'TS', 'CSS', 'HTML', 'XML', 'PY', 'CS', 'JAVA', 'SQL', 'SH', 'YAML', 'YML', 'INI', 'CONF'].includes(ext)) return 'code'
   return 'other'
 }
 

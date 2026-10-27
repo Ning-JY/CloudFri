@@ -1,14 +1,17 @@
 <script setup>
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, onMounted, h, nextTick } from 'vue'
 import { NButton, NTag } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn } from '../utils'
+import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn, thUnit } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import UploadBtn from '../components/UploadBtn.vue'
+import { usePager } from '../composables/usePager'
 
 const route = useRoute()
 const router = useRouter()
@@ -153,17 +156,39 @@ function delProject() {
   })
 }
 const parseOf = (fileId) => (d.value?.gcfxParses || []).find(g => g.projectFileId === fileId)
-// 造价解析卡片展示对象：优先当前版本软件版文件的解析，否则取最近一次解析
+const parseOfDoc = (docId) => (d.value?.gcfxParses || []).find(g => g.projectDocId === docId)
+const isGcfxName = (name) => /\.(gcfx|sgcfx)$/i.test(String(name || ''))
+// 解析卡当前选中的文件（点某个文件的「解析」按钮时锁定；为空时按默认规则：当前版本软件版 → 最近一次解析）
+const gcfxSel = ref(null)
+// 造价解析卡片展示对象：优先用户选中的文件，否则当前版本软件版文件的解析，再否则取最近一次解析（成果与资料都算）
 const gcfxTarget = computed(() => {
   if (!d.value) return null
+  if (gcfxSel.value) {
+    const pr = (d.value.gcfxParses || []).find(g => gcfxSel.value.kind === 'file' ? g.projectFileId === gcfxSel.value.id : g.projectDocId === gcfxSel.value.id)
+    if (pr) {
+      const fname = gcfxSel.value.kind === 'file'
+        ? d.value.files.find(x => x.id === gcfxSel.value.id)?.fileName
+        : d.value.docs.find(x => x.id === gcfxSel.value.id)?.fileName
+      return { parse: pr, fileName: fname || '', kind: gcfxSel.value.kind, refId: gcfxSel.value.id }
+    }
+  }
   const sw = fileGroups.value.find(g => g.key === 'Software')?.cur
-  if (sw) { const pr = parseOf(sw.id); if (pr) return { parse: pr, fileName: sw.fileName } }
+  if (sw) { const pr = parseOf(sw.id); if (pr) return { parse: pr, fileName: sw.fileName, kind: 'file', refId: sw.id } }
   const all = [...(d.value.gcfxParses || [])].sort((a, b) => String(b.parsedAt).localeCompare(String(a.parsedAt)))
   if (all.length) {
-    const f = d.value.files.find(x => x.id === all[0].projectFileId)
-    return { parse: all[0], fileName: f?.fileName || '' }
+    const pr = all[0]
+    const isFile = pr.projectFileId != null
+    const f = isFile ? d.value.files.find(x => x.id === pr.projectFileId) : d.value.docs.find(x => x.id === pr.projectDocId)
+    return { parse: pr, fileName: f?.fileName || '', kind: isFile ? 'file' : 'doc', refId: isFile ? pr.projectFileId : pr.projectDocId }
   }
   return null
+})
+// 项目内全部 GCFX/SGCFX 文件（成果 + 资料），供解析卡空状态列出待解析文件
+const gcfxFilesAll = computed(() => {
+  if (!d.value) return []
+  const fs = d.value.files.filter(f => isGcfxName(f.fileName)).map(f => ({ kind: 'file', id: f.id, name: f.fileName, parsed: !!parseOf(f.id), from: '成果文件' }))
+  const ds = d.value.docs.filter(x => isGcfxName(x.fileName)).map(x => ({ kind: 'doc', id: x.id, name: x.fileName, parsed: !!parseOfDoc(x.id), from: '项目资料' }))
+  return [...fs, ...ds]
 })
 const docGroups = computed(() => {
   if (!d.value) return []
@@ -200,26 +225,31 @@ function previewFile(kind, f) {
   previewRef.value.open(`/projects/${id}/files/${kind}/${f.id}/download`, f.fileName)
 }
 
-async function uploadDeliverable(cat, file) {
+// 上传（带进度，走全站共用 UploadBtn）：函数只负责发请求并返回结果，成功提示在 @done 里按结果给
+async function uploadDeliverable(cat, file, onProgress) {
   const fd = new FormData()
   fd.append('category', cat)
   fd.append('file', file)
-  try {
-    const { data } = await api.post(`/projects/${id}/files/deliverables`, fd)
-    if (data.filledField) message.success(`上传成功，已自动解析 GCFX，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万`)
-    else message.success(data.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，已存入当前版本')
-    await load()
-  } catch (e) { message.error(errMsg(e, '上传失败')) }
+  const { data } = await api.post(`/projects/${id}/files/deliverables`, fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
+  return data
 }
-async function uploadDoc(cat, file) {
+async function onDeliverableUploaded(results) {
+  const data = results?.[0]
+  if (data?.filledField) message.success(`上传成功，已自动解析 GCFX，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万`)
+  else message.success(data?.parseId ? '上传成功，已自动解析 GCFX' : '上传成功，已存入当前版本')
+  await load()
+}
+async function uploadDoc(cat, file, onProgress) {
   const fd = new FormData()
   fd.append('category', cat)
   fd.append('file', file)
-  try {
-    await api.post(`/projects/${id}/files/docs`, fd)
-    message.success('已归档到「' + cat + '」')
-    await load()
-  } catch (e) { message.error(errMsg(e, '上传失败')) }
+  const { data } = await api.post(`/projects/${id}/files/docs`, fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
+  return data
+}
+async function onDocUploaded(cat, results) {
+  message.success(results?.[0]?.parseId ? '已归档到「' + cat + '」，GCFX 已自动解析' : '已归档到「' + cat + '」')
+  openDocCat.value = cat
+  await load()
 }
 // 新增成果版本：当前三类成果整体转历史，开启新版本
 function newVersion() {
@@ -239,17 +269,31 @@ function newVersion() {
 function scrollToParse() {
   document.getElementById('gcfxPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-// 重新解析当前展示的 GCFX（解析器升级后刷新旧结果）
+// 选中某个文件的解析并滚动到解析卡（成果/资料文件行上的「解析」按钮：已解析直接看，未解析先解析）
+async function selectParse(kind, refId) {
+  gcfxSel.value = { kind, id: refId }
+  await nextTick()
+  scrollToParse()
+}
+async function parseFile(kind, refId) {
+  try {
+    const url = kind === 'file' ? `/projects/${id}/files/deliverables/${refId}/reparse` : `/projects/${id}/files/docs/${refId}/parse`
+    const { data } = await api.post(url)
+    message.success(`解析完成，工程总造价 ¥${fmt(data.totalAmount)}` + (data.filledField ? `，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万` : ''))
+    await load()
+    await selectParse(kind, refId)
+  } catch (e) { message.error(errMsg(e, '解析失败')) }
+}
+function onParseBtn(kind, refId) {
+  const parsed = kind === 'file' ? parseOf(refId) : parseOfDoc(refId)
+  if (parsed) selectParse(kind, refId)
+  else parseFile(kind, refId)
+}
+// 重新解析当前展示的 GCFX（解析器升级后刷新旧结果；成果与资料走各自接口，共用上面的 parseFile）
 async function reparse() {
   const t = gcfxTarget.value
   if (!t) return
-  const f = d.value.files.find(x => x.id === t.parse.projectFileId)
-  if (!f) { message.warning('源文件不存在'); return }
-  try {
-    const { data } = await api.post(`/projects/${id}/files/deliverables/${f.id}/reparse`)
-    message.success(`重新解析完成，工程总造价 ¥${fmt(data.totalAmount)}` + (data.filledField ? `，${data.filledField}已回填 ${fmt(data.filledAmountWan)} 万` : ''))
-    await load()
-  } catch (e) { message.error(errMsg(e, '重新解析失败')) }
+  await parseFile(t.kind, t.refId)
 }
 async function downloadContractFile(c, f) {
   const { data } = await api.get(`/contracts/${c.id}/files/${f.id}/download`, { responseType: 'blob' })
@@ -258,12 +302,6 @@ async function downloadContractFile(c, f) {
   a.download = f.fileName
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 800)
-}
-function pickFile(cb) {
-  const inp = document.createElement('input')
-  inp.type = 'file'
-  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]) }
-  inp.click()
 }
 function confirmDelete(text, fn) {
   dialog.warning({ title: '确认删除', content: text, positiveText: '删除', negativeText: '取消', onPositiveClick: fn })
@@ -379,7 +417,7 @@ async function delReceipt(rid) {
 const RECEIPT_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 128, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
-  { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
+  { title: thUnit('金额'), titleText: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
   { title: '所属合同', key: 'contractNo', width: 120, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
   { title: '状态', key: 'isReceived', width: 148, exportValue: (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款', render: (r) => r.isReceived
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
@@ -392,6 +430,8 @@ const RECEIPT_COLUMNS = [
 ]
 const receiptVisibleKeys = ref(RECEIPT_COLUMNS.map(c => c.key))
 const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisibleKeys.value.includes(c.key)))
+const pagerRec = usePager()
+const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) : [])
 </script>
 
 <template>
@@ -506,7 +546,8 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
             </div>
           </div>
           <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">开票与收款</b><div style="flex:1"></div><TableTools v-model="receiptVisibleKeys" :cols="RECEIPT_COLUMNS" :rows="receipts" filename="开票与收款" storage-key="pd-receipts" /><n-button size="small" type="primary" ghost @click="openReceipt" style="margin-left:8px">+ 新增开票</n-button></div>
-          <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="700" />
+          <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="pagedReceipts" :scroll-x="700" :pagination="false" />
+          <Pager v-if="d.receipts.length" v-model:page="pagerRec.page.value" v-model:page-size="pagerRec.pageSize.value" :total="d.receipts.length" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无开票记录</div>
         </div>
       </div>
@@ -536,11 +577,12 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
               </div>
               <div class="psub" v-if="g.cur" :title="g.cur.fileName">{{ fmtSize(g.cur.sizeBytes) }} · {{ String(g.cur.uploadedAt).slice(0, 10) }}</div>
               <div class="psub" v-if="g.cur && parseOf(g.cur.id)" style="color:var(--pri);font-weight:600">解析造价 ¥{{ fmt(parseOf(g.cur.id).totalAmount) }}</div>
+              <div class="psub" v-else-if="g.cur && isGcfxName(g.cur.fileName)" style="color:#9a6a12">GCFX 尚未解析，点下方「解析」</div>
               <div class="psub" v-else-if="!g.cur">暂无文件</div>
               <div class="psub" v-if="g.key === 'Report'" style="color:#6d4fc2;font-weight:600">报告编号：{{ p.reportNo || '—' }}</div>
               <div style="display:flex;gap:2px;margin-top:7px;flex-wrap:wrap;justify-content:center">
-                <n-button size="tiny" type="primary" ghost @click="pickFile(f => uploadDeliverable(g.key, f))">{{ g.cur ? '替换' : '上传' }}</n-button>
-                <n-button v-if="g.cur && parseOf(g.cur.id)" size="tiny" quaternary @click="scrollToParse">解析</n-button>
+                <UploadBtn size="tiny" type="primary" ghost silent :label="g.cur ? '替换' : '上传'" :upload="(f, p) => uploadDeliverable(g.key, f, p)" @done="onDeliverableUploaded" />
+                <n-button v-if="g.cur && isGcfxName(g.cur.fileName)" size="tiny" quaternary @click="onParseBtn('file', g.cur.id)">解析</n-button>
                 <button v-if="g.cur && fileKind(g.cur.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('deliverables', g.cur)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 <button v-if="g.cur" class="icbtn b-slate" title="下载" @click="downloadFile('deliverables', g.cur.id, g.cur.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                 <button v-if="g.cur" class="icbtn b-red" title="删除" @click="confirmDelete('删除当前版本中的该文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${g.cur.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -560,6 +602,7 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
                   <n-tag size="tiny" :bordered="false">{{ hf.catLabel }}</n-tag>
                   <span class="faint">{{ fmtSize(hf.sizeBytes) }} · {{ String(hf.uploadedAt).slice(0, 10) }}</span>
                   <span style="flex:1"></span>
+                  <button v-if="isGcfxName(hf.fileName)" class="icbtn b-violet" title="解析 / 查看解析" @click="onParseBtn('file', hf.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></button>
                   <button v-if="fileKind(hf.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('deliverables', hf)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                   <button class="icbtn b-slate" title="下载" @click="downloadFile('deliverables', hf.id, hf.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                   <button class="icbtn b-red" title="删除" @click="confirmDelete('删除该历史文件？', async () => { await api.delete(`/projects/${id}/files/deliverables/${hf.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -582,14 +625,16 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
             <div v-if="openDocCat === g.cat" style="padding:2px 0 6px 35px">
               <div class="doc-f" v-for="f in g.files" :key="f.id">
                 <span style="flex:1;min-width:0">{{ f.fileName }}</span>
+                <span v-if="parseOfDoc(f.id)" class="small" style="color:var(--pri);font-weight:600">解析 ¥{{ fmt(parseOfDoc(f.id).totalAmount) }}</span>
                 <span class="faint">{{ String(f.uploadedAt).slice(0, 10) }}</span>
                 <button class="icbtn b-violet" title="更改分类" @click="openDocCatEdit(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></button>
+                <button v-if="isGcfxName(f.fileName)" class="icbtn b-violet" title="解析 / 查看解析" @click="onParseBtn('doc', f.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></button>
                 <button v-if="fileKind(f.fileName) !== 'other'" class="icbtn b-blue" title="预览" @click="previewFile('docs', f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 <button class="icbtn b-slate" title="下载" @click="downloadFile('docs', f.id, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                 <button class="icbtn b-red" title="删除" @click="confirmDelete('删除该资料文件？', async () => { await api.delete(`/projects/${id}/files/docs/${f.id}`); load() })"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
               <div v-if="!g.files.length" class="doc-f faint">暂无文件</div>
-              <n-button size="tiny" style="margin-top:4px" @click="pickFile(f => uploadDoc(g.cat, f))">+ 上传到此分类</n-button>
+              <UploadBtn size="tiny" silent label="+ 上传到此分类" style="margin-top:4px" :upload="(f, p) => uploadDoc(g.cat, f, p)" @done="(res) => onDocUploaded(g.cat, res)" />
             </div>
           </div>
         </div>
@@ -605,7 +650,18 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
       </div>
       <div class="card" v-else>
         <div class="card-h"><span class="card-ic p"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></span><h3>造价解析</h3></div>
-        <div class="faint small">暂无解析结果。上传 GCFX / SGCFX 成果文件后会自动解析并在这里展示。</div>
+        <p class="small mut" style="line-height:1.9;margin:0 0 6px">
+          解析宏业清单计价文件（GCFX / SGCFX）：提取工程名称、总造价（与文件大写金额核对）、计价依据、单位工程构成与分部分项清单明细（编码 / 工程量 / 综合单价 / 合价）及费用汇总。成果文件与项目资料里的计价文件都可以解析，上传时会自动解析一次，之后也可随时点文件旁的「解析」重跑。
+        </p>
+        <div v-if="gcfxFilesAll.length">
+          <div v-for="gf in gcfxFilesAll" :key="gf.kind + gf.id" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line-soft)">
+            <span style="flex:1;min-width:0;font-size:13px">{{ gf.name }}</span>
+            <span class="faint small">{{ gf.from }}</span>
+            <n-tag v-if="gf.parsed" size="tiny" type="success" :bordered="false">已解析</n-tag>
+            <n-button size="tiny" type="primary" ghost @click="onParseBtn(gf.kind, gf.id)">{{ gf.parsed ? '查看解析' : '解析' }}</n-button>
+          </div>
+        </div>
+        <div v-else class="faint small">本项目还没有 GCFX / SGCFX 文件。在左侧「成果文件」或「项目资料」里上传计价文件后，这里会展示解析结果。</div>
       </div>
     </div>
 

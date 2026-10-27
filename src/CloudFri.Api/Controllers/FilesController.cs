@@ -43,6 +43,32 @@ public class FilesController : ControllerBase
         return $"工程信息为字符串级提取（工程树/大写金额/计价依据）；清单明细已锚定逐行提取（编码/名称/单位/工程量/综合单价/合价，共 {r.Items.Count} 条）；{fee}；工料机汇总尚未可靠提取，暂不显示。";
     }
 
+    private static bool IsGcfx(string fileName)
+    {
+        var ext = Path.GetExtension(fileName);
+        return ext.Equals(".gcfx", StringComparison.OrdinalIgnoreCase) || ext.Equals(".sgcfx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>解析结果落库（成果文件与项目资料共用同一实现）：按 fileId 或 docId 查找已有记录更新，没有则新建。</summary>
+    private async Task<GcfxParse> UpsertParseAsync(int? fileId, int? docId, GcfxService.GcfxResult r)
+    {
+        var parse = fileId != null
+            ? await _db.GcfxParses.FirstOrDefaultAsync(g => g.ProjectFileId == fileId)
+            : await _db.GcfxParses.FirstOrDefaultAsync(g => g.ProjectDocId == docId);
+        if (parse == null) { parse = new GcfxParse { ProjectFileId = fileId, ProjectDocId = docId }; _db.GcfxParses.Add(parse); }
+        parse.ProjectName = r.ProjectName;
+        parse.TotalAmount = r.TotalAmount;
+        parse.AmountCn = r.AmountCn;
+        parse.Basis = r.Basis;
+        parse.Region = r.Region;
+        parse.UnitsJson = JsonSerializer.Serialize(r.Units);
+        parse.ItemsJson = JsonSerializer.Serialize(r.Items);
+        parse.Note = ParseNote(r);
+        parse.ParsedAt = DateTime.Now;
+        await _db.SaveChangesAsync();
+        return parse;
+    }
+
     /// <summary>取项目当前成果版本集合；没有则建 V1，并把旧文件（SetId 为空，整体版本功能上线前上传的）归入最早的版本集合。</summary>
     private async Task<DeliverableSet> EnsureCurrentSetAsync(int projectId)
     {
@@ -119,24 +145,9 @@ public class FilesController : ControllerBase
         await _db.SaveChangesAsync();
 
         GcfxParse? parse = null;
-        if (Path.GetExtension(file.FileName).Equals(".gcfx", StringComparison.OrdinalIgnoreCase) ||
-            Path.GetExtension(file.FileName).Equals(".sgcfx", StringComparison.OrdinalIgnoreCase))
+        if (IsGcfx(file.FileName))
         {
-            try
-            {
-                var r = GcfxService.Parse(stored);
-                parse = new GcfxParse
-                {
-                    ProjectFileId = pf.Id, ProjectName = r.ProjectName, TotalAmount = r.TotalAmount,
-                    AmountCn = r.AmountCn,
-                    Basis = r.Basis, Region = r.Region,
-                    UnitsJson = JsonSerializer.Serialize(r.Units),
-                    ItemsJson = JsonSerializer.Serialize(r.Items),
-                    Note = ParseNote(r)
-                };
-                _db.GcfxParses.Add(parse);
-                await _db.SaveChangesAsync();
-            }
+            try { parse = await UpsertParseAsync(pf.Id, null, GcfxService.Parse(stored)); }
             catch { /* 解析失败不阻塞上传 */ }
         }
 
@@ -189,29 +200,31 @@ public class FilesController : ControllerBase
     {
         var f = await _db.ProjectFiles.FirstOrDefaultAsync(x => x.Id == fileId && x.ProjectId == projectId);
         if (f == null || !System.IO.File.Exists(f.StoredPath)) return NotFound();
-        var ext = Path.GetExtension(f.FileName);
-        if (!ext.Equals(".gcfx", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".sgcfx", StringComparison.OrdinalIgnoreCase))
+        if (!IsGcfx(f.FileName))
             return BadRequest(new { message = "只有 GCFX / SGCFX 文件可以解析" });
         GcfxService.GcfxResult r;
         try { r = GcfxService.Parse(f.StoredPath); }
         catch { return BadRequest(new { message = "解析失败：文件无法读取" }); }
-        var parse = await _db.GcfxParses.FirstOrDefaultAsync(g => g.ProjectFileId == f.Id);
-        if (parse == null) { parse = new GcfxParse { ProjectFileId = f.Id }; _db.GcfxParses.Add(parse); }
-        parse.ProjectName = r.ProjectName;
-        parse.TotalAmount = r.TotalAmount;
-        parse.AmountCn = r.AmountCn;
-        parse.Basis = r.Basis;
-        parse.Region = r.Region;
-        parse.UnitsJson = JsonSerializer.Serialize(r.Units);
-        parse.ItemsJson = JsonSerializer.Serialize(r.Items);
-        parse.Note = ParseNote(r);
-        parse.ParsedAt = DateTime.Now;
-        await _db.SaveChangesAsync();
+        var parse = await UpsertParseAsync(f.Id, null, r);
         string? filledField = null;
         decimal? filledAmountWan = null;
         if (r.TotalAmount is > 0 && f.Category == "Software")
             (filledField, filledAmountWan) = await ApplyAmountFillAsync(projectId, r.TotalAmount.Value);
         return Ok(new { parse.Id, parse.TotalAmount, FilledField = filledField, FilledAmountWan = filledAmountWan });
+    }
+
+    /// <summary>解析/重新解析项目资料中的 GCFX/SGCFX（与成果文件同一解析器同一落库；资料解析不回填金额）。</summary>
+    [HttpPost("docs/{docId:int}/parse")]
+    public async Task<IActionResult> ParseDoc(int projectId, int docId)
+    {
+        var d = await _db.ProjectDocs.FirstOrDefaultAsync(x => x.Id == docId && x.ProjectId == projectId);
+        if (d == null || !System.IO.File.Exists(d.StoredPath)) return NotFound();
+        if (!IsGcfx(d.FileName)) return BadRequest(new { message = "只有 GCFX / SGCFX 文件可以解析" });
+        GcfxService.GcfxResult r;
+        try { r = GcfxService.Parse(d.StoredPath); }
+        catch { return BadRequest(new { message = "解析失败：文件无法读取" }); }
+        var parse = await UpsertParseAsync(null, d.Id, r);
+        return Ok(new { parse.Id, parse.TotalAmount });
     }
 
     /// <summary>上传项目过程资料（按分类归档，只增不改版）。</summary>
@@ -229,7 +242,13 @@ public class FilesController : ControllerBase
         };
         _db.ProjectDocs.Add(doc);
         await _db.SaveChangesAsync();
-        return Ok(new { doc.Id });
+        GcfxParse? parse = null;
+        if (IsGcfx(file.FileName))
+        {
+            try { parse = await UpsertParseAsync(null, doc.Id, GcfxService.Parse(stored)); }
+            catch { /* 解析失败不阻塞上传 */ }
+        }
+        return Ok(new { doc.Id, ParseId = parse?.Id });
     }
 
     [HttpGet("deliverables/{fileId:int}/download")]
@@ -279,6 +298,7 @@ public class FilesController : ControllerBase
     {
         var d = await _db.ProjectDocs.FirstOrDefaultAsync(x => x.Id == docId && x.ProjectId == projectId);
         if (d == null) return NotFound();
+        _db.GcfxParses.RemoveRange(_db.GcfxParses.Where(g => g.ProjectDocId == docId));
         _db.ProjectDocs.Remove(d);
         await _db.SaveChangesAsync();
         TryDeleteFile(d.StoredPath);

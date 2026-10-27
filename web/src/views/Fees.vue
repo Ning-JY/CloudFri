@@ -3,8 +3,15 @@ import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, useMessage } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, statusType, todayStr, iconBtn } from '../utils'
+import { fmt, statusType, todayStr, iconBtn, thUnit, nameCell } from '../utils'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import { usePager } from '../composables/usePager'
+
+const pagerMain = usePager()
+const pagerRec = usePager()
+const pagedRows = computed(() => pagerMain.slice(rows.value))
+const pagedRecRows = computed(() => pagerRec.slice(recRows.value))
 
 const router = useRouter()
 const message = useMessage()
@@ -14,6 +21,7 @@ const invoicedTotal = computed(() => rows.value.reduce((a, r) => a + (r.invoiced
 const allContracts = ref([])
 
 async function load() {
+  pagerMain.reset()
   const { data } = await api.get('/fees')
   rows.value = data.rows
   totals.value = data.totals
@@ -34,6 +42,7 @@ const fProject = ref(null)
 const fContract = ref(null)
 const fQ = ref('')
 async function loadReceipts() {
+  pagerRec.reset()
   const params = {}
   if (fProject.value) params.projectId = fProject.value
   if (fContract.value) params.contractId = fContract.value
@@ -56,9 +65,9 @@ const recStatusText = (r) => r.isReceived ? '已收款 · ' + (r.receivedDate ||
 const REC_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
-  { title: '项目', key: 'projectName', ellipsis: { tooltip: true }, exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
+  { title: '项目', key: 'projectName', exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('div', { style: 'display:flex;gap:4px;min-width:0;align-items:baseline' }, [h('span', { class: 'num faint', style: 'flex:none' }, r.projectCode), h('div', { style: 'flex:1;min-width:0' }, [nameCell(r.projectName)])]) },
   { title: '所属合同', key: 'contractNo', width: 130, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
-  { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
+  { title: thUnit('金额'), titleText: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
   { title: '状态', key: 'isReceived', width: 148, exportValue: recStatusText, render: (r) => r.isReceived
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => recStatusText(r))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => recStatusText(r)) },
@@ -101,12 +110,12 @@ async function addReceipt() {
 
 const ALL_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
-  { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
+  { title: '项目名称', key: 'name', render: (r) => h('div', [h('div', { class: 'pname' }, [nameCell(r.name)]), h('div', { class: 'psub' }, r.client)]) },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
-  { title: '应收（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
-  { title: '已开票（万元）', key: 'invoiced', width: 110, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.invoiced)) },
-  { title: '已收（万元）', key: 'received', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
-  { title: '待收（万元）', key: 'left', width: 105, align: 'right', exportValue: (r) => Math.max(r.fee - r.received, 0), render: (r) => h('span', { class: 'num' + (r.fee - r.received > 0 ? ' neg' : '') }, fmt(Math.max(r.fee - r.received, 0))) },
+  { title: thUnit('应收'), titleText: '应收（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
+  { title: thUnit('已开票'), titleText: '已开票（万元）', key: 'invoiced', width: 110, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.invoiced)) },
+  { title: thUnit('已收'), titleText: '已收（万元）', key: 'received', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
+  { title: thUnit('待收'), titleText: '待收（万元）', key: 'left', width: 105, align: 'right', exportValue: (r) => Math.max(r.fee - r.received, 0), render: (r) => h('span', { class: 'num' + (r.fee - r.received > 0 ? ' neg' : '') }, fmt(Math.max(r.fee - r.received, 0))) },
   { title: '收款进度', key: 'pct', width: 150, exportValue: (r) => (r.fee > 0 ? Math.min(100, Math.round(r.received / r.fee * 100)) : 0) + '%', render: (r) => {
       const pct = r.fee > 0 ? Math.min(100, Math.round(r.received / r.fee * 100)) : 0
       return h('div', { style: 'display:flex;align-items:center;gap:8px' }, [
@@ -141,8 +150,9 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
-      <n-data-table :columns="columns" :data="rows" :bordered="false" :scroll-x="1060"
+      <n-data-table :columns="columns" :data="pagedRows" :bordered="false" :scroll-x="1060" :pagination="false"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/projects/' + row.id) })" />
+      <Pager v-model:page="pagerMain.page.value" v-model:page-size="pagerMain.pageSize.value" :total="rows.length" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无项目收费数据</div>
       <p class="small faint" style="padding:6px 10px">点右上角「新增开票」直接登记；点击任意行进入项目详情查看开票与收款记录。</p>
     </div>
@@ -160,7 +170,8 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       <div class="small mut" style="margin-top:8px">当前筛选：{{ recCount }} 笔 · 开票合计 <b class="num">{{ fmt(recTotal) }}</b> 万元 · 其中已收 <b class="num">{{ fmt(recReceived) }}</b> 万元</div>
     </div>
     <div class="card" style="padding:6px 10px">
-      <n-data-table :columns="recColumns" :data="recRows" :bordered="false" :scroll-x="1020" />
+      <n-data-table :columns="recColumns" :data="pagedRecRows" :bordered="false" :scroll-x="1020" :pagination="false" />
+      <Pager v-model:page="pagerRec.page.value" v-model:page-size="pagerRec.pageSize.value" :total="recRows.length" />
       <div v-if="!recRows.length" class="faint" style="text-align:center;padding:26px">暂无符合条件的开票</div>
     </div>
 

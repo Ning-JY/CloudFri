@@ -3,9 +3,11 @@ import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, priceOf, statusType, todayStr } from '../utils'
+import { fmt, priceOf, statusType, todayStr, thUnit, nameCell } from '../utils'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import { usePager } from '../composables/usePager'
 
 const router = useRouter()
 const message = useMessage()
@@ -32,6 +34,7 @@ const STATUSES = computed(() => dicts.names('ProjectStatus'))
 
 async function load() {
   loading.value = true
+  pager.reset()
   try {
     const params = {}
     if (q.value) params.q = q.value
@@ -51,13 +54,16 @@ const sums = computed(() => ({
   received: rows.value.reduce((a, p) => a + (p.received || 0), 0)
 }))
 
+const pager = usePager()
+const pagedRows = computed(() => pager.slice(rows.value))
+
 const ALL_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
-  { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
+  { title: '项目名称', key: 'name', render: (r) => h('div', [h('div', { class: 'pname' }, [nameCell(r.name)]), h('div', { class: 'psub' }, r.client)]) },
   { title: '业务类型', key: 'bizType', width: 108, render: (r) => h(NTag, { size: 'small', bordered: false }, () => r.bizType) },
-  { title: '控制价 / 结算价（万元）', key: 'price', width: 150, align: 'right', exportValue: (r) => priceOf(r).v, render: (r) => { const pr = priceOf(r); return h('div', [h('div', { class: 'num', style: 'font-weight:650' }, fmt(pr.v)), h('div', { class: 'psub' }, pr.lb)]) } },
-  { title: '咨询费（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
-  { title: '已收', key: 'received', width: 95, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
+  { title: thUnit('造价'), titleText: '造价（万元）', key: 'price', width: 150, align: 'right', exportValue: (r) => priceOf(r).v, render: (r) => { const pr = priceOf(r); return h('div', [h('div', { class: 'num', style: 'font-weight:650' }, fmt(pr.v)), h('div', { class: 'psub' }, pr.lb)]) } },
+  { title: thUnit('咨询费'), titleText: '咨询费（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
+  { title: thUnit('已收'), titleText: '已收（万元）', key: 'received', width: 95, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
   { title: '负责人', key: 'ownerName', width: 86, render: (r) => r.ownerName || '—' },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
   { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') },
@@ -123,9 +129,9 @@ onMounted(async () => {
       <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="项目台账" storage-key="projects" />
       </div>
-      <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false"
-        :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
+      <n-data-table :columns="columns" :data="pagedRows" :loading="loading" :bordered="false" :pagination="false"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/projects/' + row.id) })" />
+      <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!loading && !rows.length" class="faint" style="text-align:center;padding:26px">没有符合条件的项目，试试调整筛选或新建登记</div>
     </div>
 

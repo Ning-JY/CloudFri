@@ -3,10 +3,13 @@ import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, fileKind, iconBtn } from '../utils'
+import { fmt, fmtSize, fileKind, iconBtn, thUnit, nameCell } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import UploadBtn from '../components/UploadBtn.vue'
+import { usePager } from '../composables/usePager'
 
 const router = useRouter()
 const message = useMessage()
@@ -20,6 +23,7 @@ const TYPES = computed(() => dicts.names('ContractType'))
 const previewRef = ref(null)
 
 async function load() {
+  pager.reset()
   const params = {}
   if (q.value) params.q = q.value
   if (type.value) params.type = type.value
@@ -58,26 +62,12 @@ async function loadFiles() {
   const { data } = await api.get(`/contracts/${filesContract.value.id}/files`)
   files.value = data
 }
-function pickFile(cb, multiple = false) {
-  const inp = document.createElement('input')
-  inp.type = 'file'
-  if (multiple) inp.multiple = true
-  inp.onchange = () => { if (inp.files.length) cb(multiple ? [...inp.files] : inp.files[0]) }
-  inp.click()
-}
-async function uploadContractFile(file) {
+async function uploadContractFile(file, onProgress) {
   const fd = new FormData()
   fd.append('file', file)
-  await api.post(`/contracts/${filesContract.value.id}/files`, fd)
+  await api.post(`/contracts/${filesContract.value.id}/files`, fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
 }
-async function uploadContractFiles(files) {
-  try {
-    for (const f of files) await uploadContractFile(f)
-    message.success(files.length > 1 ? `已上传 ${files.length} 个文件` : '合同文件已上传')
-    await loadFiles()
-    load()
-  } catch (e) { message.error(errMsg(e, '上传失败')) }
-}
+async function onContractFilesDone() { await loadFiles(); load() }
 async function downloadContractFile(f) {
   const { data } = await api.get(`/contracts/${filesContract.value.id}/files/${f.id}/download`, { responseType: 'blob' })
   const a = document.createElement('a')
@@ -91,13 +81,16 @@ function delContractFile(f) {
     onPositiveClick: async () => { await api.delete(`/contracts/${filesContract.value.id}/files/${f.id}`); message.success('已删除'); await loadFiles(); load() } })
 }
 
+const pager = usePager()
+const pagedRows = computed(() => pager.slice(rows.value))
+
 const ALL_COLUMNS = [
   { title: '合同编号', key: 'no', width: 130, render: (r) => h('span', { class: 'num faint' }, r.no) },
-  { title: '合同名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.partyA || '')]) },
+  { title: '合同名称', key: 'name', render: (r) => h('div', [h('div', { class: 'pname' }, [nameCell(r.name)]), h('div', { class: 'psub' }, r.partyA || '')]) },
   { title: '类型', key: 'type', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false, type: r.type === '框架合同' ? 'info' : r.type === '补充协议' ? 'warning' : 'default' }, () => r.type) },
-  { title: '合同金额（万元）', key: 'amount', width: 130, align: 'right', exportValue: (r) => r.amount == null ? '按实结算' : r.amount, render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
+  { title: thUnit('合同金额'), titleText: '合同金额（万元）', key: 'amount', width: 130, align: 'right', exportValue: (r) => r.amount == null ? '按实结算' : r.amount, render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
   { title: '签订日期', key: 'signDate', width: 110, render: (r) => r.signDate || '—' },
-  { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, exportValue: (r) => (r.projects || []).join('、'), render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
+  { title: '关联项目', key: 'projects', exportValue: (r) => (r.projects || []).join('、'), render: (r) => r.projectCount ? nameCell(r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
   { title: '合同文件', key: 'files', width: 110, exportValue: (r) => r.fileCount || 0, render: (r) => h('div', { style: 'display:flex;align-items:center;gap:7px' }, [iconBtn('clip', 'violet', '合同文件', () => openFiles(r)), h('span', { class: 'small mut' }, r.fileCount ? `${r.fileCount} 个` : '无')]) },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
   { title: '创建', key: 'createdAt', width: 132, exportValue: (r) => (r.createdAt || '').slice(0, 10) + (r.createdBy ? ' ' + r.createdBy : ''), render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
@@ -121,9 +114,9 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="合同台账" storage-key="contracts" />
       </div>
-      <n-data-table :columns="columns" :data="rows" :bordered="false"
-        :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
+      <n-data-table :columns="columns" :data="pagedRows" :bordered="false" :pagination="false"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/contracts/' + row.id) })" />
+      <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无合同</div>
     </div>
 
@@ -160,7 +153,7 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
         <div style="display:flex;align-items:center;margin-bottom:12px">
           <span class="small mut">{{ files.length }} 个文件（合同扫描件、电子版等）</span>
           <div style="flex:1"></div>
-          <n-button type="primary" size="small" @click="pickFile(uploadContractFiles, true)">+ 上传文件（可多选）</n-button>
+          <UploadBtn label="上传文件（可多选）" type="primary" multiple :upload="uploadContractFile" @done="onContractFilesDone" />
         </div>
         <div v-for="f in files" :key="f.id" style="display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-soft)">
           <div style="flex:1;min-width:0">

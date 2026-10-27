@@ -2,11 +2,17 @@
 import { ref, computed, onMounted, h } from 'vue'
 import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmtSize, iconBtn } from '../utils'
+import { fmtSize, iconBtn, nameCell } from '../utils'
 import { useAuthStore } from '../stores/auth'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
+import Pager from '../components/Pager.vue'
+import UploadBtn from '../components/UploadBtn.vue'
+import { usePager } from '../composables/usePager'
+
+const pager = usePager()
+const pagedRows = computed(() => pager.slice(rows.value))
 
 const message = useMessage()
 const dialog = useDialog()
@@ -21,6 +27,7 @@ const CATS = computed(() => dicts.names('LibCategory'))
 const previewRef = ref(null)
 
 async function load() {
+  pager.reset()
   const params = {}
   if (cat.value) params.category = cat.value
   if (q.value) params.q = q.value
@@ -34,31 +41,22 @@ async function loadCounts() {
 function countOf(c) { return c ? allRows.value.filter(r => r.category === c).length : allRows.value.length }
 onMounted(async () => { await loadCounts(); load() })
 
-// 上传
+// 上传（带进度，走全站共用 UploadBtn）：分类与显示名称先在弹窗里选好，点按钮选文件即上传
 const showUpload = ref(false)
 const upCat = ref('规章制度')
 const upName = ref('')
-const upFile = ref(null)
-function pickUploadFile() {
-  const inp = document.createElement('input')
-  inp.type = 'file'
-  inp.onchange = () => { upFile.value = inp.files[0] || null }
-  inp.click()
-}
-async function doUpload() {
-  if (!upFile.value) { message.warning('请选择文件'); return }
+async function doUpload(file, onProgress) {
   const fd = new FormData()
   fd.append('category', upCat.value)
   if (upName.value) fd.append('name', upName.value)
-  fd.append('file', upFile.value)
-  try {
-    await api.post('/library', fd)
-    message.success('上传成功')
-    showUpload.value = false
-    upFile.value = null; upName.value = ''
-    await loadCounts()
-    load()
-  } catch (e) { message.error(errMsg(e, '上传失败')) }
+  fd.append('file', file)
+  await api.post('/library', fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
+}
+async function onUploaded() {
+  showUpload.value = false
+  upName.value = ''
+  await loadCounts()
+  load()
 }
 
 // 在线预览：统一走全局 PreviewModal（与项目/合同文件同一组件，支持 docx/xlsx 保格式预览）
@@ -93,10 +91,10 @@ function del(r) {
 }
 
 const ALL_COLUMNS = [
-  { title: '资料名称', key: 'name', ellipsis: { tooltip: true }, exportValue: (r) => r.name + (r.description ? '（' + r.description + '）' : ''), render: (r) => h('div', [
-      h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
-        r.isPinned ? h(NTag, { size: 'tiny', type: 'warning', bordered: false }, () => '置顶') : null,
-        h('span', { class: 'pname' }, r.name)
+  { title: '资料名称', key: 'name', exportValue: (r) => r.name + (r.description ? '（' + r.description + '）' : ''), render: (r) => h('div', [
+      h('div', { style: 'display:flex;align-items:center;gap:6px;min-width:0' }, [
+        r.isPinned ? h(NTag, { size: 'tiny', type: 'warning', bordered: false, style: 'flex:none' }, () => '置顶') : null,
+        h('div', { class: 'pname', style: 'flex:1;min-width:0' }, [nameCell(r.name)])
       ]),
       r.description ? h('div', { class: 'psub' }, r.description) : null
     ]) },
@@ -136,7 +134,8 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
-      <n-data-table :columns="columns" :data="rows" :bordered="false" />
+      <n-data-table :columns="columns" :data="pagedRows" :bordered="false" :pagination="false" />
+      <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">该分类暂无资料，点右上角上传</div>
     </div>
     </div>
@@ -145,15 +144,11 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       <n-form label-placement="top">
         <n-form-item label="分类"><n-select v-model:value="upCat" :options="CATS.map(c => ({ label: c, value: c }))" /></n-form-item>
         <n-form-item label="显示名称（可空，默认取文件名）"><n-input v-model:value="upName" /></n-form-item>
-        <n-form-item label="文件">
-          <n-button @click="pickUploadFile">选择文件</n-button>
-          <span class="small mut" style="margin-left:10px">{{ upFile ? upFile.name : '未选择' }}</span>
-        </n-form-item>
       </n-form>
       <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:10px">
+        <div style="display:flex;justify-content:flex-end;gap:10px;align-items:center">
           <n-button @click="showUpload = false">取消</n-button>
-          <n-button type="primary" @click="doUpload">上传</n-button>
+          <UploadBtn label="选择文件并上传" type="primary" :upload="doUpload" @done="onUploaded" />
         </div>
       </template>
     </n-modal>

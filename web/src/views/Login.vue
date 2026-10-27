@@ -44,7 +44,7 @@ async function submit() {
         </NFormItem>
         <NButton type="primary" size="large" block :loading="loading" @click="submit" style="margin-top:6px">登 录</NButton>
       </NForm>
-      <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">造价管理系统 v1.1 · 宜宾规划设计咨询集团有限公司</p>
+      <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">造价管理系统 v1.2 · 宜宾规划设计咨询集团有限公司</p>
     </div>
   </div>
 </template>

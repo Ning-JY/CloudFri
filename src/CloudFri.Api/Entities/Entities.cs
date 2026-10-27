@@ -165,7 +165,8 @@ public class ProjectDoc
 public class GcfxParse
 {
     public int Id { get; set; }
-    public int ProjectFileId { get; set; }
+    public int? ProjectFileId { get; set; }
+    public int? ProjectDocId { get; set; }
     public string? ProjectName { get; set; }
     public decimal? TotalAmount { get; set; }
     public string? AmountCn { get; set; }

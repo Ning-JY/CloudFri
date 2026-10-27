@@ -106,8 +106,11 @@ public class ProjectsController : ControllerBase
             : await _db.Members.Where(m => m.Id == p.OwnerMemberId).Select(m => m.Name).FirstOrDefaultAsync();
 
         var gcfxFileIds = files.Select(f => f.Id).ToList();
-        var parses = await _db.GcfxParses.Where(g => gcfxFileIds.Contains(g.ProjectFileId))
-            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.ItemsJson, g.Note, g.ParsedAt })
+        var gcfxDocIds = docs.Select(x => x.Id).ToList();
+        var parses = await _db.GcfxParses.Where(g =>
+                (g.ProjectFileId != null && gcfxFileIds.Contains(g.ProjectFileId.Value)) ||
+                (g.ProjectDocId != null && gcfxDocIds.Contains(g.ProjectDocId.Value)))
+            .Select(g => new { g.Id, g.ProjectFileId, g.ProjectDocId, g.ProjectName, g.TotalAmount, g.AmountCn, g.Basis, g.Region, g.UnitsJson, g.ItemsJson, g.Note, g.ParsedAt })
             .ToListAsync();
 
         return Ok(new
@@ -178,7 +181,10 @@ public class ProjectsController : ControllerBase
         var files = await _db.ProjectFiles.Where(x => x.ProjectId == id).ToListAsync();
         var docs = await _db.ProjectDocs.Where(x => x.ProjectId == id).ToListAsync();
         var fileIds = files.Select(f => f.Id).ToList();
-        _db.GcfxParses.RemoveRange(_db.GcfxParses.Where(g => fileIds.Contains(g.ProjectFileId)));
+        var docIds = docs.Select(x => x.Id).ToList();
+        _db.GcfxParses.RemoveRange(_db.GcfxParses.Where(g =>
+            (g.ProjectFileId != null && fileIds.Contains(g.ProjectFileId.Value)) ||
+            (g.ProjectDocId != null && docIds.Contains(g.ProjectDocId.Value))));
         _db.ProjectMembers.RemoveRange(_db.ProjectMembers.Where(x => x.ProjectId == id));
         _db.ProjectContracts.RemoveRange(_db.ProjectContracts.Where(x => x.ProjectId == id));
         _db.Receipts.RemoveRange(_db.Receipts.Where(x => x.ProjectId == id));

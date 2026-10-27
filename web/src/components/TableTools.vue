@@ -6,6 +6,8 @@ import * as XLSX from 'xlsx'
 // 全站共用的表格工具条（各列表统一用它，不要各页各写一套）：
 // 两个图标按钮——列显隐（勾选控制哪些列显示，选择按 storageKey 存本地）+ 导出 Excel（导出当前显示列、当前数据行）。
 // 列定义直接用表格的 columns 数组（key/title 必备，可选 exportValue(row) 自定义导出值，缺省取 row[key]）。
+// title 可以是渲染函数（如金额表头的 thUnit），这种列必须另给 titleText 纯文本，供勾选名单与导出表头用。
+const titleOf = (c) => c.titleText ?? (typeof c.title === 'string' ? c.title : c.key)
 const props = defineProps({
   cols: { type: Array, required: true },
   modelValue: { type: Array, required: true },
@@ -40,7 +42,7 @@ function toggle(key, on) {
 function exportExcel() {
   if (!props.rows.length) { message.warning('没有可导出的数据'); return }
   const defs = props.cols.filter(c => props.modelValue.includes(c.key))
-  const header = defs.map(c => String(c.title ?? c.key))
+  const header = defs.map(c => String(titleOf(c)))
   const body = props.rows.map(r => defs.map(c => {
     const v = c.exportValue ? c.exportValue(r) : r[c.key]
     return v == null ? '' : v
@@ -66,7 +68,7 @@ function exportExcel() {
       <div class="tt-pop">
         <div class="small faint" style="margin-bottom:6px">显示列</div>
         <div v-for="c in cols" :key="c.key" class="tt-row">
-          <n-checkbox :checked="modelValue.includes(c.key)" @update:checked="(v) => toggle(c.key, v)">{{ c.title }}</n-checkbox>
+          <n-checkbox :checked="modelValue.includes(c.key)" @update:checked="(v) => toggle(c.key, v)">{{ titleOf(c) }}</n-checkbox>
         </div>
       </div>
     </n-popover>

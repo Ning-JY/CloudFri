@@ -260,7 +260,10 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<DateTime>("ParsedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<int>("ProjectFileId")
+                    b.Property<int?>("ProjectDocId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProjectFileId")
                         .HasColumnType("int");
 
                     b.Property<string>("ProjectName")
