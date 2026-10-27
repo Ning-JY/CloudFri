@@ -1,10 +1,11 @@
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { NButton, NTag, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { avatarFor, iconBtn, AVATAR_PRESETS } from '../utils'
 import { useAuthStore } from '../stores/auth'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -96,32 +97,36 @@ async function resetPwd(u) {
 }
 async function toggleUser(u) { await api.post(`/users/${u.id}/toggle-active`); loadAll() }
 
-const memberColumns = [
-  { title: '头像', key: 'avatar', width: 70, render: (r) => h('img', { src: avatarFor(r), style: 'width:36px;height:36px;border-radius:50%;object-fit:cover' }) },
+const MEMBER_COLUMNS = [
+  { title: '头像', key: 'avatar', width: 70, exportValue: () => '', render: (r) => h('img', { src: avatarFor(r), style: 'width:36px;height:36px;border-radius:50%;object-fit:cover' }) },
   { title: '姓名', key: 'name', render: (r) => h('b', r.name) },
-  { title: '性别', key: 'gender', width: 70, render: (r) => r.gender === 'F' ? '女' : '男' },
+  { title: '性别', key: 'gender', width: 70, exportValue: (r) => r.gender === 'F' ? '女' : '男', render: (r) => r.gender === 'F' ? '女' : '男' },
   { title: '电话', key: 'phone', render: (r) => r.phone || '—' },
   { title: '部门', key: 'department', width: 130, render: (r) => r.department ? h(NTag, { size: 'small', bordered: false, type: r.department === '协作人员' ? 'warning' : 'info' }, () => r.department) : '—' },
   { title: '备注', key: 'remark', ellipsis: { tooltip: true }, render: (r) => r.remark || '—' },
-  { title: '状态', key: 'isActive', width: 90, render: (r) => h(NTag, { size: 'small', type: r.isActive ? 'success' : 'default', bordered: false }, () => r.isActive ? '在职' : '已停用') },
-  ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '状态', key: 'isActive', width: 90, exportValue: (r) => r.isActive ? '在职' : '已停用', render: (r) => h(NTag, { size: 'small', type: r.isActive ? 'success' : 'default', bordered: false }, () => r.isActive ? '在职' : '已停用') },
+  ...(auth.isAdmin ? [{ title: '操作', key: 'act', width: 110, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('pencil', 'green', '编辑', () => openMember(r)),
     iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleMember(r))
   ]) }] : [])
 ]
-const userColumns = [
+const memberVisibleKeys = ref(MEMBER_COLUMNS.map(c => c.key))
+const memberColumns = computed(() => MEMBER_COLUMNS.filter(c => memberVisibleKeys.value.includes(c.key)))
+const USER_COLUMNS = [
   { title: '用户名', key: 'userName' },
   { title: '显示名', key: 'displayName' },
-  { title: '角色', key: 'role', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false, type: r.role === 'Admin' ? 'success' : 'default' }, () => r.role === 'Admin' ? '管理员' : '成员') },
-  { title: '状态', key: 'isActive', width: 90, render: (r) => r.isActive ? '启用' : '停用' },
-  { title: '最后登录', key: 'lastLoginAt', width: 180, render: (r) => r.lastLoginAt
+  { title: '角色', key: 'role', width: 100, exportValue: (r) => r.role === 'Admin' ? '管理员' : '成员', render: (r) => h(NTag, { size: 'small', bordered: false, type: r.role === 'Admin' ? 'success' : 'default' }, () => r.role === 'Admin' ? '管理员' : '成员') },
+  { title: '状态', key: 'isActive', width: 90, exportValue: (r) => r.isActive ? '启用' : '停用', render: (r) => r.isActive ? '启用' : '停用' },
+  { title: '最后登录', key: 'lastLoginAt', width: 180, exportValue: (r) => r.lastLoginAt ? String(r.lastLoginAt).replace('T', ' ').slice(0, 16) + (r.lastLoginIp ? '（' + r.lastLoginIp + '）' : '') : '从未登录', render: (r) => r.lastLoginAt
       ? h('div', [h('div', { class: 'num mut' }, String(r.lastLoginAt).replace('T', ' ').slice(0, 16)), h('div', { class: 'psub' }, r.lastLoginIp || '')])
       : h('span', { class: 'faint' }, '从未登录') },
-  { title: '操作', key: 'act', width: 110, render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '操作', key: 'act', width: 110, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('key', 'violet', '重置密码', () => resetPwd(r)),
     iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleUser(r))
   ]) }
 ]
+const userVisibleKeys = ref(USER_COLUMNS.map(c => c.key))
+const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -136,6 +141,7 @@ const userColumns = [
 
     <div class="card" v-if="tab === 'members'">
       <div class="card-h"><h3>成员名单</h3><div class="sp"></div><span class="small faint">用于项目负责人与团队分工选择</span>
+        <TableTools v-model="memberVisibleKeys" :cols="MEMBER_COLUMNS" :rows="members" filename="成员名单" storage-key="members" />
         <n-button v-if="auth.isAdmin" type="primary" size="small" @click="openMember(null)">+ 新增成员</n-button></div>
       <n-data-table :columns="memberColumns" :data="members" :bordered="false" />
     </div>
@@ -160,7 +166,9 @@ const userColumns = [
     </div>
 
     <div class="card" v-if="tab === 'users' && auth.isAdmin">
-      <div class="card-h"><h3>账号管理</h3><div class="sp"></div><n-button type="primary" size="small" @click="openUser">+ 新建账号</n-button></div>
+      <div class="card-h"><h3>账号管理</h3><div class="sp"></div>
+        <TableTools v-model="userVisibleKeys" :cols="USER_COLUMNS" :rows="users" filename="账号管理" storage-key="users" />
+        <n-button type="primary" size="small" @click="openUser">+ 新建账号</n-button></div>
       <n-data-table :columns="userColumns" :data="users" :bordered="false" />
     </div>
 

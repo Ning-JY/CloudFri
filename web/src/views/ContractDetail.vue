@@ -6,6 +6,7 @@ import api, { errMsg } from '../api'
 import { fmt, fmtSize, todayStr, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,31 +135,35 @@ async function doConfirm() {
   } catch (e) { message.error(errMsg(e)) }
 }
 
-const projectColumns = [
+const PROJECT_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
   { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
-  { title: '', key: 'primary', width: 76, render: (r) => r.isPrimary ? h('span', { class: 'role-tag' }, '主合同') : '' },
+  { title: '主合同', key: 'primary', width: 76, exportValue: (r) => r.isPrimary ? '主合同' : '', render: (r) => r.isPrimary ? h('span', { class: 'role-tag' }, '主合同') : '' },
   { title: '状态', key: 'status', width: 92 },
   { title: '咨询费应收（万元）', key: 'fee', width: 130, align: 'right', render: (r) => fmt(r.fee) },
   { title: '该项目已收（万元）', key: 'receivedTotal', width: 130, align: 'right', render: (r) => fmt(r.receivedTotal) },
   { title: '其中本合同已收（万元）', key: 'contractReceived', width: 140, align: 'right', render: (r) => fmt(r.contractReceived) },
   { title: '其中本合同已开票（万元）', key: 'contractInvoiced', width: 150, align: 'right', render: (r) => fmt(r.contractInvoiced) },
-  { title: '操作', key: 'act', width: 96, render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '操作', key: 'act', width: 96, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('eye', 'blue', '项目详情', () => router.push('/projects/' + r.id)),
     iconBtn('unlink', 'red', '取消关联', () => unlink(r.id))
   ]) }
 ]
-const receiptColumns = [
+const projectVisibleKeys = ref(PROJECT_COLUMNS.map(c => c.key))
+const projectColumns = computed(() => PROJECT_COLUMNS.filter(c => projectVisibleKeys.value.includes(c.key)))
+const RECEIPT_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
-  { title: '所属项目', key: 'projectName', ellipsis: { tooltip: true }, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
+  { title: '所属项目', key: 'projectName', ellipsis: { tooltip: true }, exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
-  { title: '状态', key: 'isReceived', width: 148, render: (r) => r.isReceived
+  { title: '状态', key: 'isReceived', width: 148, exportValue: (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款', render: (r) => r.isReceived
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
-  { title: '', key: 'act', width: 46, render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)) }
+  { title: '', key: 'act', width: 46, exportValue: () => '', render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)) }
 ]
+const receiptVisibleKeys = ref(RECEIPT_COLUMNS.map(c => c.key))
+const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -207,6 +212,7 @@ const receiptColumns = [
 
       <div class="card">
         <div class="card-h"><span class="card-ic o"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><h3>本合同开票与收款</h3><div class="sp"></div>
+          <TableTools v-model="receiptVisibleKeys" :cols="RECEIPT_COLUMNS" :rows="d.receipts" filename="本合同开票与收款" storage-key="cd-receipts" />
           <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button>
         </div>
         <div class="small mut" style="margin-bottom:6px">已开票 <b class="num">{{ fmt(d.invoicedTotal) }}</b> 万元 · 已收 <b class="num">{{ fmt(d.receivedTotal) }}</b> 万元 · {{ d.receipts.length }} 笔（仅统计登记时指定了本合同的记录）</div>
@@ -217,6 +223,7 @@ const receiptColumns = [
 
     <div class="card">
       <div class="card-h"><span class="card-ic b"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></span><h3>关联项目</h3><div class="sp"></div>
+        <TableTools v-model="projectVisibleKeys" :cols="PROJECT_COLUMNS" :rows="d.projects" filename="关联项目" storage-key="cd-projects" />
         <n-button size="small" :type="d.projects.length ? 'default' : 'primary'" @click="openLink">关联项目</n-button>
       </div>
       <n-data-table v-if="d.projects.length" size="small" :bordered="false" :columns="projectColumns" :data="d.projects" :scroll-x="900" />

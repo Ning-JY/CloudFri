@@ -6,6 +6,7 @@ import { fmtSize, iconBtn } from '../utils'
 import { useAuthStore } from '../stores/auth'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -91,8 +92,8 @@ function del(r) {
     onPositiveClick: async () => { await api.delete('/library/' + r.id); message.success('已删除'); await loadCounts(); load() } })
 }
 
-const columns = [
-  { title: '资料名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [
+const ALL_COLUMNS = [
+  { title: '资料名称', key: 'name', ellipsis: { tooltip: true }, exportValue: (r) => r.name + (r.description ? '（' + r.description + '）' : ''), render: (r) => h('div', [
       h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
         r.isPinned ? h(NTag, { size: 'tiny', type: 'warning', bordered: false }, () => '置顶') : null,
         h('span', { class: 'pname' }, r.name)
@@ -101,16 +102,18 @@ const columns = [
     ]) },
   { title: '分类', key: 'category', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false }, () => r.category) },
   { title: '格式', key: 'format', width: 70 },
-  { title: '大小', key: 'sizeBytes', width: 90, align: 'right', render: (r) => fmtSize(r.sizeBytes) },
-  { title: '上传日期', key: 'uploadedAt', width: 110, render: (r) => String(r.uploadedAt).slice(0, 10) },
+  { title: '大小', key: 'sizeBytes', width: 90, align: 'right', exportValue: (r) => fmtSize(r.sizeBytes), render: (r) => fmtSize(r.sizeBytes) },
+  { title: '上传日期', key: 'uploadedAt', width: 110, exportValue: (r) => String(r.uploadedAt).slice(0, 10), render: (r) => String(r.uploadedAt).slice(0, 10) },
   { title: '上传人', key: 'uploadedBy', width: 90 },
-  { title: '操作', key: 'act', width: 158, render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '操作', key: 'act', width: 158, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
     iconBtn('eye', 'blue', '在线预览', () => openPreview(r)),
     iconBtn('pencil', 'green', '编辑（名称/分类/说明/置顶）', () => openEdit(r)),
     iconBtn('download', 'slate', '下载', () => download(r)),
     ...(auth.isAdmin ? [iconBtn('trash', 'red', '删除', () => del(r))] : [])
   ]) }
 ]
+const visibleKeys = ref(ALL_COLUMNS.map(c => c.key))
+const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -128,6 +131,7 @@ const columns = [
         <b style="font-size:14.5px">{{ cat || '全部资料' }}</b>
         <div style="flex:1"></div>
         <n-input v-model:value="q" placeholder="搜索资料名称" style="width:220px" clearable @update:value="load" />
+        <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="资料库" storage-key="library" />
         <n-button type="primary" @click="upCat = cat || CATS[0]; showUpload = true">上传资料</n-button>
       </div>
     </div>

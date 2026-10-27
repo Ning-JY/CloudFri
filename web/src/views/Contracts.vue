@@ -6,6 +6,7 @@ import api, { errMsg } from '../api'
 import { fmt, fmtSize, fileKind, iconBtn } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const router = useRouter()
 const message = useMessage()
@@ -90,17 +91,19 @@ function delContractFile(f) {
     onPositiveClick: async () => { await api.delete(`/contracts/${filesContract.value.id}/files/${f.id}`); message.success('已删除'); await loadFiles(); load() } })
 }
 
-const columns = [
+const ALL_COLUMNS = [
   { title: '合同编号', key: 'no', width: 130, render: (r) => h('span', { class: 'num faint' }, r.no) },
   { title: '合同名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.partyA || '')]) },
   { title: '类型', key: 'type', width: 100, render: (r) => h(NTag, { size: 'small', bordered: false, type: r.type === '框架合同' ? 'info' : r.type === '补充协议' ? 'warning' : 'default' }, () => r.type) },
-  { title: '合同金额（万元）', key: 'amount', width: 130, align: 'right', render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
+  { title: '合同金额（万元）', key: 'amount', width: 130, align: 'right', exportValue: (r) => r.amount == null ? '按实结算' : r.amount, render: (r) => h('span', { class: 'num', style: 'font-weight:650' }, r.amount == null ? '按实结算' : fmt(r.amount)) },
   { title: '签订日期', key: 'signDate', width: 110, render: (r) => r.signDate || '—' },
-  { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
-  { title: '合同文件', key: 'files', width: 110, render: (r) => h('div', { style: 'display:flex;align-items:center;gap:7px' }, [iconBtn('clip', 'violet', '合同文件', () => openFiles(r)), h('span', { class: 'small mut' }, r.fileCount ? `${r.fileCount} 个` : '无')]) },
+  { title: '关联项目', key: 'projects', ellipsis: { tooltip: true }, exportValue: (r) => (r.projects || []).join('、'), render: (r) => r.projectCount ? h('span', { class: 'small' }, r.projects.join('、')) : h('span', { class: 'faint small' }, '未关联') },
+  { title: '合同文件', key: 'files', width: 110, exportValue: (r) => r.fileCount || 0, render: (r) => h('div', { style: 'display:flex;align-items:center;gap:7px' }, [iconBtn('clip', 'violet', '合同文件', () => openFiles(r)), h('span', { class: 'small mut' }, r.fileCount ? `${r.fileCount} 个` : '无')]) },
   { title: '状态', key: 'status', width: 90, render: (r) => r.status || '—' },
-  { title: '创建', key: 'createdAt', width: 132, render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
+  { title: '创建', key: 'createdAt', width: 132, exportValue: (r) => (r.createdAt || '').slice(0, 10) + (r.createdBy ? ' ' + r.createdBy : ''), render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
 ]
+const visibleKeys = ref(ALL_COLUMNS.map(c => c.key))
+const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -115,6 +118,9 @@ const columns = [
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
+      <div style="display:flex;justify-content:flex-end;padding:4px 2px 0">
+        <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="合同台账" storage-key="contracts" />
+      </div>
       <n-data-table :columns="columns" :data="rows" :bordered="false"
         :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/contracts/' + row.id) })" />

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown, useMessage } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { useDicts } from '../stores/dicts'
+import { CHANGELOG } from '../data/changelog'
 import api, { errMsg } from '../api'
 
 const route = useRoute()
@@ -56,6 +57,9 @@ const userOptions = [
   { label: '退出登录', key: 'logout' }
 ]
 function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logout() }
+
+// 历史版本更新记录（点侧边栏版本号打开；数据在 data/changelog.js，最新在最上面）
+const showLog = ref(false)
 </script>
 
 <template>
@@ -76,7 +80,7 @@ function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logou
         </template>
       </nav>
       <div class="side-foot">
-        <div class="side-ver"><span class="cl">造价管理系统 v1.1</span></div>
+        <div class="side-ver"><span class="cl ver-link" @click="showLog = true" title="查看历史版本更新记录">造价管理系统 v1.1</span></div>
         <button class="collapse-btn" @click="collapsed = !collapsed" :title="collapsed ? '展开侧边栏' : '收起侧边栏'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path :d="collapsed ? 'M9.5 5.5L16 12l-6.5 6.5' : 'M14.5 5.5L8 12l6.5 6.5'" /></svg>
           <span class="cl">{{ collapsed ? '' : '收起侧边栏' }}</span>
@@ -102,6 +106,25 @@ function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logou
       </div>
       <router-view />
     </div>
+
+    <n-modal v-model:show="showLog" preset="card" title="历史版本更新记录" style="width:620px;max-width:94vw;border-radius:16px">
+      <div style="max-height:62vh;overflow:auto;padding-right:4px">
+        <div v-for="(e, i) in CHANGELOG" :key="e.version" :style="i ? 'margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft)' : ''">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <n-tag size="small" type="success" :bordered="false"><b>{{ e.version }}</b></n-tag>
+            <b style="font-size:14px">{{ e.title }}</b>
+            <span class="faint small num">{{ e.date }}</span>
+            <n-tag v-if="i === 0" size="tiny" type="warning" :bordered="false">当前版本</n-tag>
+          </div>
+          <ul style="margin:8px 0 0;padding-left:18px;line-height:1.85;font-size:13px;color:var(--sub)">
+            <li v-for="it in e.items" :key="it">{{ it }}</li>
+          </ul>
+        </div>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end"><n-button @click="showLog = false">关闭</n-button></div>
+      </template>
+    </n-modal>
 
     <n-modal v-model:show="showPwd" preset="card" title="修改密码" style="width:420px;border-radius:16px">
       <n-form>

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { NTag, useMessage } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, statusType, todayStr, iconBtn } from '../utils'
+import TableTools from '../components/TableTools.vue'
 
 const router = useRouter()
 const message = useMessage()
@@ -51,18 +52,21 @@ async function confirmReceipt(r) {
     load()
   } catch (e) { message.error(errMsg(e)) }
 }
-const recColumns = [
+const recStatusText = (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款'
+const REC_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
-  { title: '项目', key: 'projectName', ellipsis: { tooltip: true }, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
+  { title: '项目', key: 'projectName', ellipsis: { tooltip: true }, exportValue: (r) => r.projectCode + ' ' + r.projectName, render: (r) => h('span', [h('span', { class: 'num faint' }, r.projectCode + ' '), r.projectName]) },
   { title: '所属合同', key: 'contractNo', width: 130, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
-  { title: '状态', key: 'isReceived', width: 148, render: (r) => r.isReceived
-      ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
-      : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
+  { title: '状态', key: 'isReceived', width: 148, exportValue: recStatusText, render: (r) => r.isReceived
+      ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => recStatusText(r))
+      : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => recStatusText(r)) },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
-  { title: '', key: 'act', width: 46, render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款（今天到账）', () => confirmReceipt(r)) }
+  { title: '', key: 'act', width: 46, exportValue: () => '', render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款（今天到账）', () => confirmReceipt(r)) }
 ]
+const recVisibleKeys = ref(REC_COLUMNS.map(c => c.key))
+const recColumns = computed(() => REC_COLUMNS.filter(c => recVisibleKeys.value.includes(c.key)))
 
 // 新增开票（直接在本页登记，不必进项目详情；选项目后可指定该项目关联的合同）
 const showAdd = ref(false)
@@ -95,15 +99,15 @@ async function addReceipt() {
   } catch (e) { message.error(errMsg(e)) }
 }
 
-const columns = [
+const ALL_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
   { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
   { title: '应收（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
   { title: '已开票（万元）', key: 'invoiced', width: 110, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.invoiced)) },
   { title: '已收（万元）', key: 'received', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
-  { title: '待收（万元）', key: 'left', width: 105, align: 'right', render: (r) => h('span', { class: 'num' + (r.fee - r.received > 0 ? ' neg' : '') }, fmt(Math.max(r.fee - r.received, 0))) },
-  { title: '收款进度', key: 'pct', width: 150, render: (r) => {
+  { title: '待收（万元）', key: 'left', width: 105, align: 'right', exportValue: (r) => Math.max(r.fee - r.received, 0), render: (r) => h('span', { class: 'num' + (r.fee - r.received > 0 ? ' neg' : '') }, fmt(Math.max(r.fee - r.received, 0))) },
+  { title: '收款进度', key: 'pct', width: 150, exportValue: (r) => (r.fee > 0 ? Math.min(100, Math.round(r.received / r.fee * 100)) : 0) + '%', render: (r) => {
       const pct = r.fee > 0 ? Math.min(100, Math.round(r.received / r.fee * 100)) : 0
       return h('div', { style: 'display:flex;align-items:center;gap:8px' }, [
         h('div', { style: 'flex:1;height:7px;border-radius:99px;background:#e9efeb;overflow:hidden' }, [
@@ -115,6 +119,8 @@ const columns = [
   { title: '最近开票', key: 'lastReceiptDate', width: 110, render: (r) => r.lastReceiptDate || '—' },
   { title: '开票笔数', key: 'receiptCount', width: 76, align: 'right' }
 ]
+const visibleKeys = ref(ALL_COLUMNS.map(c => c.key))
+const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -130,6 +136,7 @@ const columns = [
       <div style="display:flex;gap:10px;align-items:center">
         <b style="font-size:14.5px">项目收费明细</b>
         <div style="flex:1"></div>
+        <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="项目收费明细" storage-key="fees-main" />
         <n-button type="primary" @click="openAdd">+ 新增开票</n-button>
       </div>
     </div>
@@ -148,6 +155,7 @@ const columns = [
         <n-select v-model:value="fProject" clearable filterable :options="rows.map(r => ({ label: r.code + ' · ' + r.name, value: r.id }))" placeholder="全部项目" style="width:230px" @update:value="loadReceipts" />
         <n-select v-model:value="fContract" clearable filterable :options="allContracts.map(c => ({ label: c.no + ' · ' + c.name, value: c.id }))" placeholder="全部合同" style="width:230px" @update:value="loadReceipts" />
         <n-input v-model:value="fQ" placeholder="搜索项目 / 合同" style="width:180px" clearable @update:value="loadReceipts" />
+        <TableTools v-model="recVisibleKeys" :cols="REC_COLUMNS" :rows="recRows" filename="开票与收款明细" storage-key="fees-rec" />
       </div>
       <div class="small mut" style="margin-top:8px">当前筛选：{{ recCount }} 笔 · 开票合计 <b class="num">{{ fmt(recTotal) }}</b> 万元 · 其中已收 <b class="num">{{ fmt(recReceived) }}</b> 万元</div>
     </div>

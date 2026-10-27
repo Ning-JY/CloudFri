@@ -9,7 +9,7 @@
   --line: #dde5df;
   --line-soft: #e8edea;
   --red: #c0392b;
-  --bg: #f1eee2;
+  --bg: #e9ebea;
   --card: rgba(255, 255, 255, 0.88);
   --radius: 16px;
 }
@@ -21,9 +21,8 @@ body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(900px 480px at 85% -10%, rgba(163, 189, 252, 0.30), transparent 60%),
-    radial-gradient(720px 430px at -8% -6%, rgba(246, 205, 120, 0.30), transparent 55%),
-    radial-gradient(800px 500px at -10% 110%, rgba(24, 97, 64, 0.12), transparent 55%),
+    radial-gradient(900px 480px at 85% -10%, rgba(163, 189, 252, 0.35), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, rgba(24, 97, 64, 0.14), transparent 55%),
     var(--bg);
   font-size: 14px;
 }
@@ -265,3 +264,5 @@ body {
 /* 登录页 */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .login-card { width: 400px; max-width: 100%; background: rgba(255,255,255,.85); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,.85); border-radius: 22px; box-shadow: 0 24px 60px rgba(20, 40, 30, .16); padding: 34px 34px 28px; }
+.ver-link { cursor: pointer; }
+.ver-link:hover { color: var(--pri); text-decoration: underline; }

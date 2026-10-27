@@ -8,6 +8,7 @@ import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn } from '.
 import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -375,20 +376,22 @@ async function delReceipt(rid) {
   await load()
 }
 
-const receiptColumns = [
+const RECEIPT_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 128, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
   { title: '金额（万元）', key: 'amount', align: 'right', render: (r) => fmt(r.amount) },
   { title: '所属合同', key: 'contractNo', width: 120, render: (r) => r.contractNo ? h('span', { title: r.contractName || '' }, r.contractNo) : h('span', { class: 'faint' }, '未指定') },
-  { title: '状态', key: 'isReceived', width: 148, render: (r) => r.isReceived
+  { title: '状态', key: 'isReceived', width: 148, exportValue: (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款', render: (r) => r.isReceived
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
-  { title: '', key: 'act', width: 78, render: (r) => h('span', { style: 'display:inline-flex;gap:2px' }, [
+  { title: '', key: 'act', width: 78, exportValue: () => '', render: (r) => h('span', { style: 'display:inline-flex;gap:2px' }, [
       r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)),
       iconBtn('trash', 'red', '删除', () => delReceipt(r.id))
     ]) }
 ]
+const receiptVisibleKeys = ref(RECEIPT_COLUMNS.map(c => c.key))
+const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisibleKeys.value.includes(c.key)))
 </script>
 
 <template>
@@ -502,7 +505,7 @@ const receiptColumns = [
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">开票与收款</b><div style="flex:1"></div><n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button></div>
+          <div style="display:flex;align-items:center;margin:14px 0 4px"><b style="font-size:13.5px">开票与收款</b><div style="flex:1"></div><TableTools v-model="receiptVisibleKeys" :cols="RECEIPT_COLUMNS" :rows="receipts" filename="开票与收款" storage-key="pd-receipts" /><n-button size="small" type="primary" ghost @click="openReceipt" style="margin-left:8px">+ 新增开票</n-button></div>
           <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="d.receipts" :scroll-x="700" />
           <div v-if="!d.receipts.length" class="faint small" style="padding:8px 0">暂无开票记录</div>
         </div>

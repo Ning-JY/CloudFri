@@ -5,6 +5,7 @@ import { NTag, NButton, useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, priceOf, statusType, todayStr } from '../utils'
 import { useDicts } from '../stores/dicts'
+import TableTools from '../components/TableTools.vue'
 
 const router = useRouter()
 const message = useMessage()
@@ -50,18 +51,21 @@ const sums = computed(() => ({
   received: rows.value.reduce((a, p) => a + (p.received || 0), 0)
 }))
 
-const columns = [
+const ALL_COLUMNS = [
   { title: '编号', key: 'code', width: 118, render: (r) => h('span', { class: 'num faint' }, r.code) },
   { title: '项目名称', key: 'name', ellipsis: { tooltip: true }, render: (r) => h('div', [h('div', { class: 'pname' }, r.name), h('div', { class: 'psub' }, r.client)]) },
   { title: '业务类型', key: 'bizType', width: 108, render: (r) => h(NTag, { size: 'small', bordered: false }, () => r.bizType) },
-  { title: '控制价 / 结算价（万元）', key: 'price', width: 150, align: 'right', render: (r) => { const pr = priceOf(r); return h('div', [h('div', { class: 'num', style: 'font-weight:650' }, fmt(pr.v)), h('div', { class: 'psub' }, pr.lb)]) } },
+  { title: '控制价 / 结算价（万元）', key: 'price', width: 150, align: 'right', exportValue: (r) => priceOf(r).v, render: (r) => { const pr = priceOf(r); return h('div', [h('div', { class: 'num', style: 'font-weight:650' }, fmt(pr.v)), h('div', { class: 'psub' }, pr.lb)]) } },
   { title: '咨询费（万元）', key: 'fee', width: 105, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.fee)) },
   { title: '已收', key: 'received', width: 95, align: 'right', render: (r) => h('span', { class: 'num' }, fmt(r.received)) },
   { title: '负责人', key: 'ownerName', width: 86, render: (r) => r.ownerName || '—' },
   { title: '状态', key: 'status', width: 96, render: (r) => h(NTag, { size: 'small', type: statusType(r.status), bordered: false }, () => r.status) },
   { title: '承接日期', key: 'acceptedDate', width: 108, render: (r) => h('span', { class: 'num mut' }, r.acceptedDate || '—') },
-  { title: '创建', key: 'createdAt', width: 132, render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
+  { title: '创建', key: 'createdAt', width: 132, exportValue: (r) => (r.createdAt || '').slice(0, 10) + (r.createdBy ? ' ' + r.createdBy : ''), render: (r) => h('div', [h('div', { class: 'num mut' }, (r.createdAt || '').slice(0, 10) || '—'), h('div', { class: 'psub' }, r.createdBy || '')]) }
 ]
+// 列显隐（TableTools 工具条控制，存本地）
+const visibleKeys = ref(ALL_COLUMNS.map(c => c.key))
+const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.includes(c.key)))
 // 删除项目不在列表里操作（防误删）：统一在项目详情页头部删除。
 
 // 新建登记（精简版：金额与合同不在登记时填写）
@@ -116,6 +120,9 @@ onMounted(async () => {
     </div>
 
     <div class="card" style="padding:6px 10px">
+      <div style="display:flex;justify-content:flex-end;padding:4px 2px 0">
+        <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="项目台账" storage-key="projects" />
+      </div>
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false"
         :pagination="{ pageSize: 15, showSizePicker: true, pageSizes: [15, 30, 50] }"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/projects/' + row.id) })" />
