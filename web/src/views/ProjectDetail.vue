@@ -79,24 +79,46 @@ const amounts = computed(() => {
   if (!p.value) return []
   const cr = cutRate(p.value)
   if (isAudit.value) return [
-    { lb: '送审金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '委托方送审' },
-    { lb: '审定金额', vl: fmt(p.value.approvedAmount) + ' 万', sb: p.value.reportNo ? '报告 ' + p.value.reportNo : '审定结果' },
-    { lb: '核减额 / 核减率', vl: (p.value.submitAmount != null && p.value.approvedAmount != null) ? fmt(p.value.submitAmount - p.value.approvedAmount) + ' 万' : '—', sb: cr != null ? '核减率 ' + cr.toFixed(2) + '%' : '—' },
-    { lb: '咨询费（应收 / 已收）', vl: fmt(p.value.fee) + ' 万', sb: '已收 ' + fmt(received.value) + ' 万' }
+    { lb: '送审金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '委托方送审', field: 'submitAmount', num: p.value.submitAmount },
+    { lb: '审定金额', vl: fmt(p.value.approvedAmount) + ' 万', sb: p.value.reportNo ? '报告 ' + p.value.reportNo : '审定结果', field: 'approvedAmount', num: p.value.approvedAmount },
+    { lb: '核减额 / 核减率', vl: (p.value.submitAmount != null && p.value.approvedAmount != null) ? fmt(p.value.submitAmount - p.value.approvedAmount) + ' 万' : '—', sb: cr != null ? '核减率 ' + cr.toFixed(2) + '%' : '—', field: null },
+    { lb: '咨询费（应收 / 已收）', vl: fmt(p.value.fee) + ' 万', sb: '已收 ' + fmt(received.value) + ' 万', field: 'fee', num: p.value.fee }
   ]
   if (isProcess.value) return [
-    { lb: '建安造价', vl: fmt(p.value.submitAmount) + ' 万', sb: '过程控制对象' },
-    { lb: '合同金额', vl: contractAmount.value === '按实结算' ? '按实结算' : fmt(contractAmount.value) + ' 万', sb: '关联合同合计' },
-    { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定' },
-    { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款' }
+    { lb: '建安造价', vl: fmt(p.value.submitAmount) + ' 万', sb: '过程控制对象', field: 'submitAmount', num: p.value.submitAmount },
+    { lb: '合同金额', vl: contractAmount.value === '按实结算' ? '按实结算' : fmt(contractAmount.value) + ' 万', sb: '关联合同合计', field: null },
+    { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定', field: 'fee', num: p.value.fee },
+    { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款', field: null }
   ]
   return [
-    { lb: p.value.bizType === '清单控制价' ? '控制价金额' : '预算金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '编制成果' },
-    { lb: '合同金额', vl: contractAmount.value === '按实结算' ? '按实结算' : (contractAmount.value == null ? '—' : fmt(contractAmount.value) + ' 万'), sb: '关联合同合计' },
-    { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定' },
-    { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款' }
+    { lb: p.value.bizType === '清单控制价' ? '控制价金额' : '预算金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '编制成果', field: 'submitAmount', num: p.value.submitAmount },
+    { lb: '合同金额', vl: contractAmount.value === '按实结算' ? '按实结算' : (contractAmount.value == null ? '—' : fmt(contractAmount.value) + ' 万'), sb: '关联合同合计', field: null },
+    { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定', field: 'fee', num: p.value.fee },
+    { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款', field: null }
   ]
 })
+
+// 头部金额直接修改：点金额卡的数值就地编辑（送审类/审定/咨询费应收），保存走整表更新接口
+const editingAmt = ref(null)
+const editAmtVal = ref(null)
+function projectPayload(v, overrides = {}) {
+  return {
+    name: v.name, client: v.client, contactName: v.contactName, contactPhone: v.contactPhone,
+    bizType: v.bizType, scale: v.scale, status: v.status, ownerMemberId: v.ownerMemberId,
+    acceptedDate: v.acceptedDate, dueDate: v.dueDate, reportDate: v.reportDate, reportNo: v.reportNo,
+    submitAmount: v.submitAmount, approvedAmount: v.approvedAmount, fee: v.fee || 0, description: v.description,
+    ...overrides
+  }
+}
+function startAmtEdit(a) { editingAmt.value = a.field; editAmtVal.value = a.num ?? null }
+async function saveAmtEdit(a) {
+  try {
+    await api.put('/projects/' + id, projectPayload(p.value, { [a.field]: a.field === 'fee' ? (editAmtVal.value || 0) : editAmtVal.value }))
+    message.success(a.lb + '已更新')
+    editingAmt.value = null
+    await load()
+  } catch (e) { message.error(errMsg(e)) }
+}
 
 // 成果文件整体版本：三类文件同属一个版本集合；SetId 为空的旧文件按最早集合（V1）处理
 // 当前版本：被设为最终版的集合优先，否则版本号最大者
@@ -310,14 +332,8 @@ function confirmDelete(text, fn) {
 // 更改状态（头部按钮下拉直接切换，不必打开编辑弹窗）
 const statusOptions = computed(() => STATUSES.value.map(s => ({ label: s, key: s, disabled: p.value?.status === s })))
 async function changeStatus(key) {
-  const v = p.value
   try {
-    await api.put('/projects/' + id, {
-      name: v.name, client: v.client, contactName: v.contactName, contactPhone: v.contactPhone,
-      bizType: v.bizType, scale: v.scale, status: key, ownerMemberId: v.ownerMemberId,
-      acceptedDate: v.acceptedDate, dueDate: v.dueDate, reportDate: v.reportDate, reportNo: v.reportNo,
-      submitAmount: v.submitAmount, approvedAmount: v.approvedAmount, fee: v.fee || 0, description: v.description
-    })
+    await api.put('/projects/' + id, projectPayload(p.value, { status: key }))
     message.success('状态已改为「' + key + '」')
     await load()
   } catch (e) { message.error(errMsg(e)) }
@@ -332,12 +348,7 @@ function openEdit() {
 }
 async function saveEdit() {
   try {
-    await api.put('/projects/' + id, {
-      name: ef.value.name, client: ef.value.client, contactName: ef.value.contactName, contactPhone: ef.value.contactPhone,
-      bizType: ef.value.bizType, scale: ef.value.scale, status: ef.value.status, ownerMemberId: ef.value.ownerMemberId,
-      acceptedDate: ef.value.acceptedDate, dueDate: ef.value.dueDate, reportDate: ef.value.reportDate, reportNo: ef.value.reportNo,
-      submitAmount: ef.value.submitAmount, approvedAmount: ef.value.approvedAmount, fee: ef.value.fee || 0, description: ef.value.description
-    })
+    await api.put('/projects/' + id, projectPayload(ef.value))
     message.success('已保存')
     showEdit.value = false
     await load()
@@ -470,7 +481,16 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
             <svg v-else-if="i === 2" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
           </span>
-          <div style="flex:1;min-width:0"><div class="lb">{{ a.lb }}</div><div class="vl num">{{ a.vl }}</div><div class="sb">{{ a.sb }}</div></div>
+          <div style="flex:1;min-width:0">
+            <div class="lb">{{ a.lb }}</div>
+            <div v-if="a.field && editingAmt === a.field" style="display:flex;gap:4px;align-items:center">
+              <n-input-number v-model:value="editAmtVal" :min="0" :precision="2" size="small" style="flex:1;min-width:0" @keyup.enter="saveAmtEdit(a)" @keyup.esc="editingAmt = null" />
+              <n-button size="tiny" type="primary" @click="saveAmtEdit(a)">保存</n-button>
+              <n-button size="tiny" @click="editingAmt = null">取消</n-button>
+            </div>
+            <div v-else class="vl num" :class="{ 'vl-edit': a.field }" :title="a.field ? '点击直接修改' : null" @click="a.field && startAmtEdit(a)">{{ a.vl }}<svg v-if="a.field" class="amt-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></div>
+            <div class="sb">{{ a.sb }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -538,7 +558,7 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
             <div v-if="c.files && c.files.length" style="margin-top:5px">
               <div v-for="f in c.files" :key="f.id" style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--sub);padding:3px 0;flex-wrap:wrap">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 13px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                <span style="min-width:0">{{ f.fileName }}</span>
+                <span class="fname" style="flex:1" :title="f.fileName">{{ f.fileName }}</span>
                 <span class="faint">{{ fmtSize(f.sizeBytes) }}</span>
                 <button class="icbtn b-blue" title="预览" @click="previewRef.open(`/contracts/${c.id}/files/${f.id}/download`, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 <button class="icbtn b-slate" title="下载" @click="downloadContractFile(c, f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
@@ -624,7 +644,7 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
             </div>
             <div v-if="openDocCat === g.cat" style="padding:2px 0 6px 35px">
               <div class="doc-f" v-for="f in g.files" :key="f.id">
-                <span style="flex:1;min-width:0">{{ f.fileName }}</span>
+                <span class="fname" style="flex:1" :title="f.fileName">{{ f.fileName }}</span>
                 <span v-if="parseOfDoc(f.id)" class="small" style="color:var(--pri);font-weight:600">解析 ¥{{ fmt(parseOfDoc(f.id).totalAmount) }}</span>
                 <span class="faint">{{ String(f.uploadedAt).slice(0, 10) }}</span>
                 <button class="icbtn b-violet" title="更改分类" @click="openDocCatEdit(f)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></button>
@@ -655,7 +675,7 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
         </p>
         <div v-if="gcfxFilesAll.length">
           <div v-for="gf in gcfxFilesAll" :key="gf.kind + gf.id" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line-soft)">
-            <span style="flex:1;min-width:0;font-size:13px">{{ gf.name }}</span>
+            <span class="fname" style="flex:1;font-size:13px" :title="gf.name">{{ gf.name }}</span>
             <span class="faint small">{{ gf.from }}</span>
             <n-tag v-if="gf.parsed" size="tiny" type="success" :bordered="false">已解析</n-tag>
             <n-button size="tiny" type="primary" ghost @click="onParseBtn(gf.kind, gf.id)">{{ gf.parsed ? '查看解析' : '解析' }}</n-button>

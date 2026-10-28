@@ -132,7 +132,8 @@ body {
 .num { font-variant-numeric: tabular-nums; }
 .mut { color: var(--sub); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
 .neg { color: var(--red); }
-.pname { font-weight: 600; }
+.pname { font-weight: 600; min-width: 0; }
+.pname .n-ellipsis { max-width: 100%; }
 .psub { font-size: 12px; color: var(--faint); }
 .clickable-row { cursor: pointer; }
 .sumstrip { display: flex; gap: 0; padding: 0; overflow: hidden; }
@@ -164,6 +165,13 @@ body {
 .d-amounts .sb { font-size: 12px; color: var(--sub); margin-top: 4px; }
 .d-amounts .a-ic { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: var(--acc); box-shadow: 0 4px 10px rgba(13,38,76,.18); z-index: 1; }
 .d-amounts .a-ic svg { width: 18px; height: 18px; }
+/* 头部金额就地编辑：可改金额数值可点，悬停显铅笔 */
+.d-amounts .vl-edit { cursor: pointer; }
+.d-amounts .vl-edit:hover { text-decoration: underline dotted; text-underline-offset: 4px; }
+.d-amounts .amt-pen { width: 14px; height: 14px; margin-left: 6px; vertical-align: -1px; opacity: .45; }
+.d-amounts .vl-edit:hover .amt-pen { opacity: 1; }
+/* 文件名/名称单行截断：定宽省略号，绝不撑开布局（长名悬停用 title 或 tooltip 看全名） */
+.fname { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 /* 头部卡内返回按钮：图标按钮，位于项目编号之前 */
 .back-ic { width: 38px; height: 38px; flex: 0 0 38px; border: 1px solid var(--line); background: linear-gradient(135deg, #eef5f0, #e2efe7); color: var(--pri-d); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .back-ic:hover { background: linear-gradient(135deg, #e2efe7, #d3e7da); }

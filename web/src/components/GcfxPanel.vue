@@ -88,7 +88,7 @@ const TABS = [
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
         <div style="font-size:15px;font-weight:700">{{ parse.projectName || fileTitle || project?.name }}</div>
-        <div class="small mut" style="margin-top:4px">{{ fileName }} · 上传后自动解析 · 宏业清单计价文件（GCFX）</div>
+        <div class="small mut fname" style="margin-top:4px" :title="fileName">{{ fileName }} · 上传后自动解析 · 宏业清单计价文件（GCFX）</div>
       </div>
       <n-tag type="success" :bordered="false">已自动解析</n-tag>
     </div>
@@ -205,7 +205,7 @@ const TABS = [
       <div class="kv-row"><span class="k">所在地区</span><span>{{ parse.region || '—' }}</span></div>
       <div class="kv-row"><span class="k">单位工程</span><span>{{ units.length }} 个：{{ units.map(u => u.name).join('、') }}</span></div>
       <div v-if="hasFee" class="kv-row"><span class="k">费用构成</span><span class="num">分部分项 {{ money(feeSum.boq) }} · 措施 {{ money(feeSum.measures) }} · 税前 {{ money(feeSum.taxBase) }} · 增值税 {{ money(feeSum.vat) }}</span></div>
-      <div class="kv-row"><span class="k">源文件</span><span>{{ fileName || '—' }}</span></div>
+      <div class="kv-row"><span class="k">源文件</span><span class="fname" :title="fileName">{{ fileName || '—' }}</span></div>
       <div class="kv-row"><span class="k">台账送审金额</span><span class="num">{{ project?.submitAmount != null ? fmt(project.submitAmount) + ' 万元' : '—' }}</span></div>
       <div class="kv-row"><span class="k">台账审定金额</span><span class="num">{{ project?.approvedAmount != null ? fmt(project.approvedAmount) + ' 万元' : '—' }}</span></div>
       <div class="kv-row"><span class="k">解析时间</span><span class="num">{{ String(parse.parsedAt).slice(0, 16).replace('T', ' ') }}</span></div>

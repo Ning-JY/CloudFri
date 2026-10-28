@@ -196,7 +196,7 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
         <div v-if="!d.files.length" class="faint small">暂无附件，点右上角上传合同扫描件、电子版等，可一次多选多个文件。</div>
         <div v-for="f in d.files" :key="f.id" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line-soft)">
           <div style="flex:1;min-width:0">
-            <div style="font-size:13.5px">{{ f.fileName }}</div>
+            <div class="fname" style="font-size:13.5px" :title="f.fileName">{{ f.fileName }}</div>
             <div class="psub">{{ fmtSize(f.sizeBytes) }} · {{ String(f.uploadedAt).slice(0, 10) }} · {{ f.uploadedBy || '' }}</div>
           </div>
           <button class="icbtn b-blue" title="预览" @click="previewRef.open(`/contracts/${id}/files/${f.id}/download`, f.fileName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>

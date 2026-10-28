@@ -10,7 +10,7 @@ export function thUnit(label, unit = '万元') {
 
 // 名称单元格：单行省略，悬停显示完整名称（tooltip）。长名称列统一用它，别再用裸文本或列级 ellipsis。
 export function nameCell(text) {
-  return h(NEllipsis, { tooltip: { width: 360, scrollable: true, maxHeight: 240 } }, { default: () => text ?? '' })
+  return h(NEllipsis, { style: { maxWidth: '100%' }, tooltip: { width: 360, scrollable: true, maxHeight: 240 } }, { default: () => text ?? '' })
 }
 export const ICONS = {
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
