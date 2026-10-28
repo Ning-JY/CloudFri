@@ -54,7 +54,7 @@ onMounted(async () => {
 const p = computed(() => d.value?.project)
 const isAudit = computed(() => p.value && (p.value.bizType === '结算审核' || p.value.bizType === '竣工决算'))
 const isProcess = computed(() => p.value && (p.value.bizType === '跟踪审计' || p.value.bizType === '全过程咨询'))
-const isBudget = computed(() => p.value && p.value.bizType === '预算编制')
+const isReview = computed(() => p.value && p.value.bizType === '预算评审')
 const contractAmount = computed(() => {
   if (!d.value) return null
   const cs = d.value.contracts
@@ -91,7 +91,7 @@ const amounts = computed(() => {
     { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定', field: 'fee', num: p.value.fee },
     { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款', field: null }
   ]
-  if (isBudget.value) {
+  if (isReview.value) {
     const rcr = reviewCutRate(p.value)
     return [
       { lb: '送审金额', vl: fmt(p.value.reviewSubmitAmount) + ' 万', sb: '委托方送审', field: 'reviewSubmitAmount', num: p.value.reviewSubmitAmount },
@@ -714,7 +714,7 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
           <n-form-item-gi label="出报告日期"><n-date-picker v-model:formatted-value="ef.reportDate" value-format="yyyy-MM-dd" type="date" clearable style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="咨询费应收（万元）"><n-input-number v-model:value="ef.fee" :min="0" style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="送审 / 控制价 / 预算 / 建安（万元）"><n-input-number v-model:value="ef.submitAmount" :min="0" style="width:100%" /></n-form-item-gi>
-          <n-form-item-gi v-if="ef.bizType === '预算编制'" label="送审金额（万元，预算评审）"><n-input-number v-model:value="ef.reviewSubmitAmount" :min="0" style="width:100%" /></n-form-item-gi>
+          <n-form-item-gi v-if="ef.bizType === '预算评审'" label="送审金额（万元，预算评审）"><n-input-number v-model:value="ef.reviewSubmitAmount" :min="0" style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="审定金额（万元，审核类）"><n-input-number v-model:value="ef.approvedAmount" :min="0" style="width:100%" /></n-form-item-gi>
         </n-grid>
         <n-form-item label="项目概况"><n-input v-model:value="ef.description" type="textarea" /></n-form-item>

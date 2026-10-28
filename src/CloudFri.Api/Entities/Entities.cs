@@ -55,7 +55,7 @@ public class Project
     public string? ReportNo { get; set; }
     public decimal? SubmitAmount { get; set; }
     public decimal? ApprovedAmount { get; set; }
-    /// <summary>预算评审送审金额（万元，仅预算编制类用）：委托方送审价，审减率＝(送审-预算)/送审，预算即 SubmitAmount。</summary>
+    /// <summary>预算评审送审金额（万元，仅预算评审类用）：委托方送审价，审减率＝(送审-预算)/送审，预算即 SubmitAmount。</summary>
     public decimal? ReviewSubmitAmount { get; set; }
     public decimal Fee { get; set; }
     public string? Description { get; set; }

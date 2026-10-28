@@ -39,7 +39,7 @@ public static class SeedData
         {
             var groups = new Dictionary<string, string[]>
             {
-                ["BizType"] = new[] { "结算审核", "预算编制", "清单控制价", "竣工决算", "跟踪审计", "全过程咨询" },
+                ["BizType"] = new[] { "结算审核", "预算编制", "预算评审", "清单控制价", "竣工决算", "跟踪审计", "全过程咨询" },
                 ["ProjectStatus"] = new[] { "编制中", "审核中", "已出报告", "已归档" },
                 ["ContractType"] = new[] { "框架合同", "单项合同", "补充协议" },
                 ["TeamRole"] = new[] { "项目负责人", "编制人", "审核人", "审定人", "配合人员" },

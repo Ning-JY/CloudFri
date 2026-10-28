@@ -181,6 +181,7 @@ public class FilesController : ControllerBase
                 field = proj.BizType switch
                 {
                     "预算编制" => "预算金额",
+                    "预算评审" => "预算金额",
                     "清单控制价" => "控制价金额",
                     "跟踪审计" or "全过程咨询" => "建安造价",
                     _ => "送审金额"

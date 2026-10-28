@@ -64,7 +64,7 @@ export function priceOf(p) {
   if (p.bizType === '结算审核' || p.bizType === '竣工决算')
     return p.approvedAmount != null ? { v: p.approvedAmount, lb: '结算价' } : { v: p.submitAmount, lb: '送审价' }
   if (p.bizType === '清单控制价') return { v: p.submitAmount, lb: '控制价' }
-  if (p.bizType === '预算编制') return { v: p.submitAmount, lb: '预算价' }
+  if (p.bizType === '预算编制' || p.bizType === '预算评审') return { v: p.submitAmount, lb: '预算价' }
   return { v: p.submitAmount, lb: '建安造价' }
 }
 
