@@ -129,7 +129,7 @@ onMounted(async () => {
       <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="项目台账" storage-key="projects" />
       </div>
-      <n-data-table :columns="columns" :data="pagedRows" :loading="loading" :bordered="false" :pagination="false"
+      <n-data-table table-layout="fixed" :columns="columns" :data="pagedRows" :loading="loading" :bordered="false" :pagination="false"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/projects/' + row.id) })" />
       <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!loading && !rows.length" class="faint" style="text-align:center;padding:26px">没有符合条件的项目，试试调整筛选或新建登记</div>

@@ -114,7 +114,7 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       <div style="position:absolute;top:13px;right:14px;z-index:6">
         <TableTools v-model="visibleKeys" :cols="ALL_COLUMNS" :rows="rows" filename="合同台账" storage-key="contracts" />
       </div>
-      <n-data-table :columns="columns" :data="pagedRows" :bordered="false" :pagination="false"
+      <n-data-table table-layout="fixed" :columns="columns" :data="pagedRows" :bordered="false" :pagination="false"
         :row-props="(row) => ({ style: 'cursor:pointer', onClick: () => router.push('/contracts/' + row.id) })" />
       <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">暂无合同</div>

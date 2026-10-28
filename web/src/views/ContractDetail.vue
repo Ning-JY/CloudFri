@@ -211,7 +211,7 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
           <n-button size="small" type="primary" ghost @click="openReceipt">+ 新增开票</n-button>
         </div>
         <div class="small mut" style="margin-bottom:6px">已开票 <b class="num">{{ fmt(d.invoicedTotal) }}</b> 万元 · 已收 <b class="num">{{ fmt(d.receivedTotal) }}</b> 万元 · {{ d.receipts.length }} 笔（仅统计登记时指定了本合同的记录）</div>
-        <n-data-table v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="pagedReceipts" :scroll-x="760" :pagination="false" />
+        <n-data-table table-layout="fixed" v-if="d.receipts.length" size="small" :bordered="false" :columns="receiptColumns" :data="pagedReceipts" :scroll-x="760" :pagination="false" />
         <Pager v-if="d.receipts.length" v-model:page="pagerRec.page.value" v-model:page-size="pagerRec.pageSize.value" :total="d.receipts.length" />
         <div v-else class="faint small" style="padding:8px 0">暂无挂在本合同名下的开票。在项目详情或收费台账登记开票时选择「所属合同」即可归到这里。</div>
       </div>
@@ -222,7 +222,7 @@ const receiptColumns = computed(() => RECEIPT_COLUMNS.filter(c => receiptVisible
         <TableTools v-model="projectVisibleKeys" :cols="PROJECT_COLUMNS" :rows="d.projects" filename="关联项目" storage-key="cd-projects" />
         <n-button size="small" :type="d.projects.length ? 'default' : 'primary'" @click="openLink">关联项目</n-button>
       </div>
-      <n-data-table v-if="d.projects.length" size="small" :bordered="false" :columns="projectColumns" :data="pagedProjects" :scroll-x="900" :pagination="false" />
+      <n-data-table table-layout="fixed" v-if="d.projects.length" size="small" :bordered="false" :columns="projectColumns" :data="pagedProjects" :scroll-x="900" :pagination="false" />
       <Pager v-if="d.projects.length" v-model:page="pagerProj.page.value" v-model:page-size="pagerProj.pageSize.value" :total="d.projects.length" />
       <div v-else class="faint small">暂未关联项目，点右上角「关联项目」添加（框架合同可挂多个项目）。</div>
     </div>

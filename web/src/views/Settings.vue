@@ -150,7 +150,7 @@ const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.valu
       <div class="card-h"><h3>成员名单</h3><div class="sp"></div><span class="small faint">用于项目负责人与团队分工选择</span>
         <TableTools v-model="memberVisibleKeys" :cols="MEMBER_COLUMNS" :rows="members" filename="成员名单" storage-key="members" />
         <n-button v-if="auth.isAdmin" type="primary" size="small" @click="openMember(null)">+ 新增成员</n-button></div>
-      <n-data-table :columns="memberColumns" :data="pagedMembers" :bordered="false" :pagination="false" />
+      <n-data-table table-layout="fixed" :columns="memberColumns" :data="pagedMembers" :bordered="false" :pagination="false" />
       <Pager v-model:page="pagerMembers.page.value" v-model:page-size="pagerMembers.pageSize.value" :total="members.length" />
     </div>
 
@@ -177,7 +177,7 @@ const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.valu
       <div class="card-h"><h3>账号管理</h3><div class="sp"></div>
         <TableTools v-model="userVisibleKeys" :cols="USER_COLUMNS" :rows="users" filename="账号管理" storage-key="users" />
         <n-button type="primary" size="small" @click="openUser">+ 新建账号</n-button></div>
-      <n-data-table :columns="userColumns" :data="pagedUsers" :bordered="false" :pagination="false" />
+      <n-data-table table-layout="fixed" :columns="userColumns" :data="pagedUsers" :bordered="false" :pagination="false" />
       <Pager v-model:page="pagerUsers.page.value" v-model:page-size="pagerUsers.pageSize.value" :total="users.length" />
     </div>
 

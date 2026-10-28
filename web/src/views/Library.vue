@@ -134,7 +134,7 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
       </div>
     </div>
     <div class="card" style="padding:6px 10px">
-      <n-data-table :columns="columns" :data="pagedRows" :bordered="false" :pagination="false" />
+      <n-data-table table-layout="fixed" :columns="columns" :data="pagedRows" :bordered="false" :pagination="false" />
       <Pager v-model:page="pager.page.value" v-model:page-size="pager.pageSize.value" :total="rows.length" />
       <div v-if="!rows.length" class="faint" style="text-align:center;padding:26px">该分类暂无资料，点右上角上传</div>
     </div>
