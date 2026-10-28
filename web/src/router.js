@@ -16,7 +16,8 @@ const routes = [
       { path: 'library', name: 'library', component: () => import('./views/Library.vue'), meta: { title: '资料库' } },
       { path: 'stats', name: 'stats', component: () => import('./views/Stats.vue'), meta: { title: '统计分析' } },
       { path: 'fee-calc', name: 'fee-calc', component: () => import('./views/FeeCalc.vue'), meta: { title: '其他费测算' } },
-      { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue'), meta: { title: '基础设置' } }
+      { path: 'settings', name: 'settings', component: () => import('./views/Settings.vue'), meta: { title: '基础设置', adminOnly: true } },
+      { path: 'profile', name: 'profile', component: () => import('./views/Profile.vue'), meta: { title: '个人中心' } }
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/' }
@@ -28,6 +29,12 @@ router.beforeEach((to) => {
   const token = localStorage.getItem('cloudfri_token')
   if (!to.meta.public && !token) return { name: 'login' }
   if (to.name === 'login' && token) return { name: 'home' }
+  // 基础设置仅管理员：普通成员输网址也进不去
+  if (to.meta.adminOnly) {
+    let role = null
+    try { role = JSON.parse(localStorage.getItem('cloudfri_user') || 'null')?.role } catch { role = null }
+    if (role !== 'Admin') return { name: 'home' }
+  }
   return true
 })
 

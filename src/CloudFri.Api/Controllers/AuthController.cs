@@ -23,6 +23,7 @@ public class AuthController : ControllerBase
 
     public record LoginReq(string UserName, string Password);
     public record ChangePwdReq(string OldPassword, string NewPassword);
+    public record ProfileReq(string DisplayName, string? Phone, string? Remark, string? AvatarPath);
 
     // JwtBearer 默认会把 JWT 的 sub 映射为 NameIdentifier，FindFirstValue("sub") 取不到会抛错（改密码 500 的根因）
     private int CurrentUserId() =>
@@ -71,6 +72,54 @@ public class AuthController : ControllerBase
         var user = await _db.Users.FindAsync(id);
         if (user == null) return Unauthorized();
         return Ok(new { user.Id, user.UserName, user.DisplayName, user.Role, user.MemberId });
+    }
+
+    /// <summary>个人中心详情：账号信息 + 关联成员信息（未关联成员时 Member 为 null）。</summary>
+    [Authorize]
+    [HttpGet("profile")]
+    public async Task<IActionResult> Profile()
+    {
+        var id = CurrentUserId();
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return Unauthorized();
+        object? member = null;
+        if (user.MemberId is int mid)
+        {
+            var m = await _db.Members.FindAsync(mid);
+            if (m != null)
+                member = new { m.Id, m.Name, m.Gender, m.Phone, m.Department, m.Remark, m.AvatarPath, m.IsActive };
+        }
+        return Ok(new
+        {
+            user.Id, user.UserName, user.DisplayName, user.Role, user.MemberId,
+            user.CreatedAt, user.LastLoginAt, user.LastLoginIp,
+            Member = member
+        });
+    }
+
+    /// <summary>个人中心自助编辑：显示名 + 关联成员的电话/备注/头像（姓名/性别/部门为组织信息，只读）。</summary>
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile(ProfileReq req)
+    {
+        var id = CurrentUserId();
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return Unauthorized();
+        var dn = req.DisplayName?.Trim();
+        if (string.IsNullOrWhiteSpace(dn)) return BadRequest(new { message = "显示名不能为空" });
+        user.DisplayName = dn;
+        if (user.MemberId is int mid)
+        {
+            var m = await _db.Members.FindAsync(mid);
+            if (m != null)
+            {
+                m.Phone = string.IsNullOrWhiteSpace(req.Phone) ? null : req.Phone.Trim();
+                m.Remark = string.IsNullOrWhiteSpace(req.Remark) ? null : req.Remark.Trim();
+                m.AvatarPath = string.IsNullOrWhiteSpace(req.AvatarPath) ? null : req.AvatarPath.Trim();
+            }
+        }
+        await _db.SaveChangesAsync();
+        return await Profile();
     }
 
     [Authorize]

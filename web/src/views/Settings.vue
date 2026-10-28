@@ -244,10 +244,6 @@ const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.valu
 </template>
 
 <style scoped>
-.avatar-grid { display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 8px; max-height: 168px; overflow-y: auto; padding: 2px; }
-.avatar-grid img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: transform .1s; }
-.avatar-grid img:hover { transform: scale(1.08); }
-.avatar-grid img.on { border-color: var(--pri); box-shadow: 0 0 0 3px rgba(24, 97, 64, .18); }
 .dict-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; font-size: 13px; }
 .dict-row:hover { background: #f2f6f2; }
 .dict-row .grip { width: 15px; height: 15px; color: #b3beb5; cursor: grab; flex: 0 0 15px; }

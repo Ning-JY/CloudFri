@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown, useMessage } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
@@ -11,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 useDicts().load() // 全站字典预加载（各页下拉统一读字典 store）
+onMounted(() => auth.fetchProfile()) // 拉个人资料：左下角头像用实际头像
 const message = useMessage()
 const collapsed = ref(false)
 
@@ -31,7 +32,7 @@ const NAV = [
     { name: 'fee-calc', label: '其他费测算', path: '/fee-calc', icon: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/>' }
   ] },
   { group: '系统', items: [
-    { name: 'settings', label: '基础设置', path: '/settings', icon: '<circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.36.95a7 7 0 0 0-2.42-1.4L13.7 2.6h-3.4l-.38 2.54a7 7 0 0 0-2.42 1.4l-2.36-.95-2 3.46 2 1.55a7 7 0 0 0 0 2.8l-2 1.55 2 3.46 2.36-.95a7 7 0 0 0 2.42 1.4l.38 2.54h3.4l.38-2.54a7 7 0 0 0 2.42-1.4l2.36.95 2-3.46-2-1.55c.1-.45.14-.92.14-1.4z"/>' }
+    { name: 'settings', label: '基础设置', path: '/settings', adminOnly: true, icon: '<circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.36.95a7 7 0 0 0-2.42-1.4L13.7 2.6h-3.4l-.38 2.54a7 7 0 0 0-2.42 1.4l-2.36-.95-2 3.46 2 1.55a7 7 0 0 0 0 2.8l-2 1.55 2 3.46 2.36-.95a7 7 0 0 0 2.42 1.4l.38 2.54h3.4l.38-2.54a7 7 0 0 0 2.42-1.4l2.36.95 2-3.46-2-1.55c.1-.45.14-.92.14-1.4z"/>' }
   ] }
 ]
 
@@ -39,6 +40,10 @@ const activeName = computed(() => {
   if (route.name === 'project-detail' || route.name === 'gcfx') return 'projects'
   return route.name
 })
+// 基础设置仅管理员：非管理员不渲染该菜单（路由层另有拦截）
+const navGroups = computed(() => NAV
+  .map(g => ({ ...g, items: g.items.filter(i => !i.adminOnly || auth.isAdmin) }))
+  .filter(g => g.items.length))
 const title = computed(() => route.meta.title || '工作台')
 
 const showPwd = ref(false)
@@ -54,10 +59,15 @@ async function changePwd() {
 function logout() { auth.logout(); router.push('/login') }
 
 const userOptions = [
+  { label: '个人中心', key: 'profile' },
   { label: '修改密码', key: 'pwd' },
   { label: '退出登录', key: 'logout' }
 ]
-function onUserSelect(key) { if (key === 'pwd') showPwd.value = true; else logout() }
+function onUserSelect(key) {
+  if (key === 'profile') router.push('/profile')
+  else if (key === 'pwd') showPwd.value = true
+  else logout()
+}
 
 // 历史版本更新记录（点侧边栏版本号打开；数据在 data/changelog.js，最新在最上面）
 const showLog = ref(false)
@@ -71,7 +81,7 @@ const showLog = ref(false)
         <div class="brand-t"><b>造价管理系统</b><span>宜宾规划设计咨询集团</span></div>
       </div>
       <nav>
-        <template v-for="g in NAV" :key="g.group || 'root'">
+        <template v-for="g in navGroups" :key="g.group || 'root'">
           <div v-if="g.group" class="nav-t">{{ g.group }}</div>
           <a v-for="it in g.items" :key="it.name" class="nav-a" :class="{ on: activeName === it.name }"
              @click="router.push(it.path)">
@@ -87,14 +97,14 @@ const showLog = ref(false)
           <span class="cl">{{ collapsed ? '' : '收起侧边栏' }}</span>
         </button>
       </div>
-      <div class="side-user">
-        <img src="https://randomuser.me/api/portraits/men/52.jpg" alt="" />
+      <div class="side-user" @click="router.push('/profile')" title="个人中心" style="cursor:pointer">
+        <img :src="auth.avatarUrl" alt="" />
         <div class="user-meta">
           <b>{{ auth.displayName }}</b>
           <span>{{ auth.isAdmin ? '管理员' : '成员' }}</span>
         </div>
-        <NDropdown :options="userOptions" @select="onUserSelect" trigger="click">
-          <NButton quaternary circle size="small" style="margin-left:auto">···</NButton>
+        <NDropdown :options="userOptions" @select="onUserSelect" trigger="click" @click.stop>
+          <NButton quaternary circle size="small" style="margin-left:auto" @click.stop>···</NButton>
         </NDropdown>
       </div>
     </aside>
