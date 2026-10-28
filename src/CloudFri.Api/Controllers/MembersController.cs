@@ -143,6 +143,7 @@ public class UsersController : ControllerBase
     public UsersController(AppDbContext db) => _db = db;
 
     public record UserReq(string UserName, string Password, string DisplayName, string Role, int? MemberId);
+    public record UserEditReq(string DisplayName, string Role, int? MemberId);
     public record ResetReq(string Password);
 
     [HttpGet]
@@ -162,6 +163,26 @@ public class UsersController : ControllerBase
         var u = new User { UserName = req.UserName, DisplayName = req.DisplayName, Role = req.Role, MemberId = req.MemberId };
         u.PasswordHash = _hasher.HashPassword(u, req.Password);
         _db.Users.Add(u);
+        await _db.SaveChangesAsync();
+        return Ok(new { u.Id });
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, UserEditReq req)
+    {
+        var u = await _db.Users.FindAsync(id);
+        if (u == null) return NotFound();
+        if (req.Role != "Admin" && req.Role != "Member")
+            return BadRequest(new { message = "角色不合法" });
+        // 至少保留一名启用的管理员，避免把管理员全部降级后无人能进基础设置
+        if (u.Role == "Admin" && req.Role != "Admin" && u.IsActive
+            && !await _db.Users.AnyAsync(x => x.Id != id && x.Role == "Admin" && x.IsActive))
+            return BadRequest(new { message = "至少保留一名管理员，不能降级最后一名管理员" });
+        if (req.MemberId.HasValue && !await _db.Members.AnyAsync(x => x.Id == req.MemberId.Value))
+            return BadRequest(new { message = "关联成员不存在" });
+        u.DisplayName = req.DisplayName;
+        u.Role = req.Role;
+        u.MemberId = req.MemberId;
         await _db.SaveChangesAsync();
         return Ok(new { u.Id });
     }

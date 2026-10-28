@@ -1,5 +1,9 @@
 <script setup>
-import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN, darkTheme } from 'naive-ui'
+import { useThemeStore } from './stores/theme'
+
+const theme = useThemeStore()
+theme.init() // 挂载前先把深色类落到 body，避免首屏闪烁
 
 const themeOverrides = {
   common: {
@@ -16,7 +20,7 @@ const themeOverrides = {
 </script>
 
 <template>
-  <NConfigProvider :locale="zhCN" :date-locale="dateZhCN" :theme-overrides="themeOverrides">
+  <NConfigProvider :locale="zhCN" :date-locale="dateZhCN" :theme="theme.dark ? darkTheme : null" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <NDialogProvider>
         <router-view />

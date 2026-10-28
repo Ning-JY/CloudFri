@@ -37,17 +37,6 @@ async function save() {
   } catch (e) { message.error(errMsg(e)) }
 }
 
-const pwd = ref({ oldPassword: '', newPassword: '', confirm: '' })
-async function changePwd() {
-  if (!pwd.value.oldPassword || !pwd.value.newPassword) { message.warning('请填写原密码和新密码'); return }
-  if (pwd.value.newPassword !== pwd.value.confirm) { message.warning('两次输入的新密码不一致'); return }
-  try {
-    await api.post('/auth/change-password', { oldPassword: pwd.value.oldPassword, newPassword: pwd.value.newPassword })
-    message.success('密码已修改')
-    pwd.value = { oldPassword: '', newPassword: '', confirm: '' }
-  } catch (e) { message.error(errMsg(e)) }
-}
-
 function fmtTime(s) { return s ? String(s).replace('T', ' ').slice(0, 19) : '—' }
 onMounted(load)
 </script>
@@ -76,7 +65,7 @@ onMounted(load)
         <div class="prow"><span>性别</span><b>{{ member.gender === 'F' ? '女' : '男' }}</b></div>
         <div class="prow"><span>部门</span><b>{{ member.department || '—' }}</b></div>
         <div class="prow"><span>电话</span><b class="num">{{ member.phone || '—' }}</b></div>
-        <div class="prow"><span>备注</span><b>{{ member.remark || '—' }}</b></div>
+        <div class="prow"><span>备注</span><b style="white-space:pre-wrap">{{ member.remark || '—' }}</b></div>
       </template>
       <div v-else class="small faint" style="line-height:1.7">该账号未关联成员名单，暂无成员信息；头像、电话、备注需关联后才能编辑，请联系管理员在「基础设置 → 账号管理」里关联。</div>
     </div>
@@ -107,25 +96,10 @@ onMounted(load)
               </div>
             </div>
           </n-form-item>
-          <n-grid v-if="member" :cols="2" :x-gap="12">
-            <n-form-item-gi label="电话"><n-input v-model:value="form.phone" /></n-form-item-gi>
-            <n-form-item-gi label="备注"><n-input v-model:value="form.remark" placeholder="如：外聘专家 / 兼职配合等" /></n-form-item-gi>
-          </n-grid>
+          <n-form-item v-if="member" label="电话"><n-input v-model:value="form.phone" /></n-form-item>
+          <n-form-item v-if="member" label="备注"><n-input v-model:value="form.remark" type="textarea" :rows="3" placeholder="如：外聘专家 / 兼职配合等，可多行" /></n-form-item>
         </n-form>
         <div style="display:flex;justify-content:flex-end"><n-button type="primary" @click="save">保存</n-button></div>
-      </div>
-
-      <!-- 更改密码 -->
-      <div class="card">
-        <div class="card-h"><h3>更改密码</h3></div>
-        <n-form label-placement="top">
-          <n-form-item label="原密码"><n-input v-model:value="pwd.oldPassword" type="password" show-password-on="click" /></n-form-item>
-          <n-grid :cols="2" :x-gap="12">
-            <n-form-item-gi label="新密码"><n-input v-model:value="pwd.newPassword" type="password" show-password-on="click" placeholder="至少 6 位" /></n-form-item-gi>
-            <n-form-item-gi label="确认新密码"><n-input v-model:value="pwd.confirm" type="password" show-password-on="click" /></n-form-item-gi>
-          </n-grid>
-        </n-form>
-        <div style="display:flex;justify-content:flex-end"><n-button type="primary" @click="changePwd">确认修改</n-button></div>
       </div>
     </div>
   </div>

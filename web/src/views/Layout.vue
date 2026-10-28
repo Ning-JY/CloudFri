@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown, useMessage } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
+import { useThemeStore } from '../stores/theme'
 import { useDicts } from '../stores/dicts'
 import { CHANGELOG } from '../data/changelog'
 import api, { errMsg } from '../api'
@@ -10,6 +11,7 @@ import api, { errMsg } from '../api'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const theme = useThemeStore()
 useDicts().load() // 全站字典预加载（各页下拉统一读字典 store）
 onMounted(() => auth.fetchProfile()) // 拉个人资料：左下角头像用实际头像
 const message = useMessage()
@@ -29,7 +31,7 @@ const NAV = [
   ] },
   { group: '分析', items: [
     { name: 'stats', label: '统计分析', path: '/stats', icon: '<path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/>' },
-    { name: 'fee-calc', label: '其他费测算', path: '/fee-calc', icon: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/>' }
+    { name: 'fee-calc', label: '收费测算', path: '/fee-calc', icon: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8.01" y2="11"/><line x1="12" y1="11" x2="12.01" y2="11"/><line x1="16" y1="11" x2="16.01" y2="11"/><line x1="8" y1="15" x2="8.01" y2="15"/><line x1="12" y1="15" x2="12.01" y2="15"/><line x1="16" y1="15" x2="16.01" y2="15"/>' }
   ] },
   { group: '系统', items: [
     { name: 'settings', label: '基础设置', path: '/settings', adminOnly: true, icon: '<circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.36.95a7 7 0 0 0-2.42-1.4L13.7 2.6h-3.4l-.38 2.54a7 7 0 0 0-2.42 1.4l-2.36-.95-2 3.46 2 1.55a7 7 0 0 0 0 2.8l-2 1.55 2 3.46 2.36-.95a7 7 0 0 0 2.42 1.4l.38 2.54h3.4l.38-2.54a7 7 0 0 0 2.42-1.4l2.36.95 2-3.46-2-1.55c.1-.45.14-.92.14-1.4z"/>' }
@@ -91,7 +93,7 @@ const showLog = ref(false)
         </template>
       </nav>
       <div class="side-foot">
-        <div class="side-ver"><span class="cl ver-link" @click="showLog = true" title="查看历史版本更新记录">造价管理系统 v1.2</span></div>
+        <div class="side-ver"><span class="cl ver-link" @click="showLog = true" title="查看历史版本更新记录">造价管理系统 v1.3</span></div>
         <button class="collapse-btn" @click="collapsed = !collapsed" :title="collapsed ? '展开侧边栏' : '收起侧边栏'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path :d="collapsed ? 'M9.5 5.5L16 12l-6.5 6.5' : 'M14.5 5.5L8 12l6.5 6.5'" /></svg>
           <span class="cl">{{ collapsed ? '' : '收起侧边栏' }}</span>
@@ -113,6 +115,10 @@ const showLog = ref(false)
       <div class="topbar">
         <h1>{{ title }}</h1>
         <div style="flex:1"></div>
+        <button class="theme-btn" @click="theme.toggle()" :title="theme.dark ? '切换到浅色模式' : '切换到深色模式'">
+          <svg v-if="theme.dark" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
         <span class="faint small">{{ auth.displayName }} · {{ auth.isAdmin ? '管理员' : '成员' }}</span>
       </div>
       <router-view />

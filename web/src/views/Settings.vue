@@ -97,6 +97,15 @@ async function saveUser() {
     message.success('账号已创建'); showUser.value = false; loadAll()
   } catch (e) { message.error(errMsg(e)) }
 }
+const showUserEdit = ref(false)
+const ef = ref({})
+function openUserEdit(u) { ef.value = { id: u.id, userName: u.userName, displayName: u.displayName, role: u.role, memberId: u.memberId ?? null }; showUserEdit.value = true }
+async function saveUserEdit() {
+  try {
+    await api.put('/users/' + ef.value.id, { displayName: ef.value.displayName, role: ef.value.role, memberId: ef.value.memberId })
+    message.success('已保存'); showUserEdit.value = false; loadAll()
+  } catch (e) { message.error(errMsg(e)) }
+}
 async function resetPwd(u) {
   const pwd = '123456'
   dialog.info({ title: '重置密码', content: `将 ${u.userName} 的密码重置为 ${pwd}（请提醒其登录后立即修改）？`, positiveText: '重置', negativeText: '取消',
@@ -127,7 +136,8 @@ const USER_COLUMNS = [
   { title: '最后登录', key: 'lastLoginAt', width: 180, exportValue: (r) => r.lastLoginAt ? String(r.lastLoginAt).replace('T', ' ').slice(0, 16) + (r.lastLoginIp ? '（' + r.lastLoginIp + '）' : '') : '从未登录', render: (r) => r.lastLoginAt
       ? h('div', [h('div', { class: 'num mut' }, String(r.lastLoginAt).replace('T', ' ').slice(0, 16)), h('div', { class: 'psub' }, r.lastLoginIp || '')])
       : h('span', { class: 'faint' }, '从未登录') },
-  { title: '操作', key: 'act', width: 110, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
+  { title: '操作', key: 'act', width: 140, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
+    iconBtn('pencil', 'green', '编辑', () => openUserEdit(r)),
     iconBtn('key', 'violet', '重置密码', () => resetPwd(r)),
     iconBtn('power', r.isActive ? 'orange' : 'green', r.isActive ? '停用' : '启用', () => toggleUser(r))
   ]) }
@@ -210,7 +220,7 @@ const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.valu
         </n-form-item>
         <n-form-item label="电话"><n-input v-model:value="mf.phone" /></n-form-item>
         <n-form-item label="部门"><n-select v-model:value="mf.department" :options="DEPARTMENTS.map(t => ({ label: t, value: t }))" /></n-form-item>
-        <n-form-item label="备注"><n-input v-model:value="mf.remark" placeholder="如：外聘专家 / 兼职配合等" /></n-form-item>
+        <n-form-item label="备注"><n-input v-model:value="mf.remark" type="textarea" :rows="3" placeholder="如：外聘专家 / 兼职配合等，可多行" /></n-form-item>
       </n-form>
       <template #footer><div style="display:flex;justify-content:flex-end;gap:10px">
         <n-button @click="showMember = false">取消</n-button><n-button type="primary" @click="saveMember">保存</n-button>
@@ -238,6 +248,20 @@ const userColumns = computed(() => USER_COLUMNS.filter(c => userVisibleKeys.valu
       </n-form>
       <template #footer><div style="display:flex;justify-content:flex-end;gap:10px">
         <n-button @click="showUser = false">取消</n-button><n-button type="primary" @click="saveUser">创建</n-button>
+      </div></template>
+    </n-modal>
+
+    <n-modal v-model:show="showUserEdit" preset="card" title="编辑账号" style="width:440px;border-radius:16px">
+      <n-form label-placement="top">
+        <n-form-item label="用户名"><n-input v-model:value="ef.userName" disabled /></n-form-item>
+        <n-grid :cols="2" :x-gap="12">
+          <n-form-item-gi label="显示名"><n-input v-model:value="ef.displayName" /></n-form-item-gi>
+          <n-form-item-gi label="角色"><n-select v-model:value="ef.role" :options="[{label:'成员',value:'Member'},{label:'管理员',value:'Admin'}]" /></n-form-item-gi>
+        </n-grid>
+        <n-form-item label="关联成员"><n-select v-model:value="ef.memberId" clearable :options="members.filter(m => m.isActive).map(m => ({ label: m.name, value: m.id }))" /></n-form-item>
+      </n-form>
+      <template #footer><div style="display:flex;justify-content:flex-end;gap:10px">
+        <n-button @click="showUserEdit = false">取消</n-button><n-button type="primary" @click="saveUserEdit">保存</n-button>
       </div></template>
     </n-modal>
   </div>
