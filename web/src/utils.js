@@ -1,5 +1,6 @@
 // 图标操作按钮（列表/卡片行内操作）：图形 SVG + 按动作区分颜色，渲染函数里用 h 构造。
 import { h } from 'vue'
+import { NEllipsis } from 'naive-ui'
 
 // 金额列表头：名称 + 单位分开渲染——单位不用括号，用 .th-unit 橙色小字显示（如「造价 万元」）。
 // 用了函数标题的列必须同时给 titleText 纯文本，供 TableTools 的列勾选名单与 Excel 导出表头使用。
@@ -7,10 +8,9 @@ export function thUnit(label, unit = '万元') {
   return () => h('span', [label, h('span', { class: 'th-unit' }, unit)])
 }
 
-// 名称单元格：单行定宽截断（.fname 省略号），悬停 title 显示完整名称。长名称列统一用它，别再用裸文本或 NEllipsis（NEllipsis 在表格单元格里不限宽、会把列撑开，已实测）。
+// 名称单元格：NEllipsis 单行截断 + 悬停 tooltip 显示完整名称。前提是所在表格为固定布局（table-layout="fixed"，各列表已统一设置）——自动布局下单元格宽度由内容决定，NEllipsis 不限宽会把列撑开（2026-10-28 实测教训）。文件行（非表格）用 .fname + title，不要混用。
 export function nameCell(text) {
-  const t = text ?? ''
-  return h('span', { class: 'fname', title: t }, t)
+  return h(NEllipsis, { style: { maxWidth: '100%' }, tooltip: { width: 360, scrollable: true, maxHeight: 240 } }, { default: () => text ?? '' })
 }
 export const ICONS = {
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
