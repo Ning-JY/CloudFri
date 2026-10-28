@@ -133,7 +133,6 @@ body {
 .mut { color: var(--sub); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
 .neg { color: var(--red); }
 .pname { font-weight: 600; min-width: 0; }
-.pname .n-ellipsis { max-width: 100%; }
 .psub { font-size: 12px; color: var(--faint); }
 .clickable-row { cursor: pointer; }
 .sumstrip { display: flex; gap: 0; padding: 0; overflow: hidden; }
