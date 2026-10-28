@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import api from '../api'
@@ -8,6 +8,9 @@ import { fmt } from '../utils'
 const router = useRouter()
 const data = ref(null)
 const chartEl = ref(null)
+// 待处理项目默认只显示 5 条，其余点「显示更多」展开
+const showAllPending = ref(false)
+const pendingShown = computed(() => data.value ? (showAllPending.value ? data.value.pending : data.value.pending.slice(0, 5)) : [])
 
 onMounted(async () => {
   const { data: d } = await api.get('/stats/dashboard')
@@ -17,8 +20,8 @@ onMounted(async () => {
     const chart = echarts.init(chartEl.value)
     chart.setOption({
       tooltip: { trigger: 'axis' },
-      legend: { data: ['新承接项目', '收款（万元）'], right: 0, icon: 'roundRect', itemWidth: 14 },
-      grid: { left: 8, right: 8, top: 36, bottom: 0, containLabel: true },
+      legend: { data: ['新承接项目', '收款（万元）'], bottom: 0, left: 'center', icon: 'roundRect', itemWidth: 14 },
+      grid: { left: 8, right: 8, top: 20, bottom: 30, containLabel: true },
       xAxis: { type: 'category', data: d.monthly.map(m => m.month.slice(5) + '月'), axisLine: { lineStyle: { color: '#dde5df' } }, axisLabel: { color: '#93a29a' } },
       yAxis: [{ type: 'value', splitLine: { lineStyle: { color: '#eef2ef' } }, axisLabel: { color: '#93a29a' } },
               { type: 'value', splitLine: { show: false }, axisLabel: { color: '#93a29a' } }],
@@ -48,7 +51,7 @@ onMounted(async () => {
       <div class="card">
         <div class="card-h"><h3>待处理项目</h3><div class="sp"></div><span class="small faint">编制中 / 审核中</span></div>
         <div v-if="!data.pending.length" class="faint small">暂无待处理项目</div>
-        <div v-for="p in data.pending" :key="p.id" class="todo-it" @click="router.push('/projects/' + p.id)">
+        <div v-for="p in pendingShown" :key="p.id" class="todo-it" @click="router.push('/projects/' + p.id)">
           <span class="todo-ic" :class="p.status === '审核中' ? 'c-violet' : 'c-blue'">
             <svg v-if="p.status === '审核中'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
@@ -58,6 +61,9 @@ onMounted(async () => {
             <div class="psub">{{ p.code }} · {{ p.status }}</div>
           </div>
           <span class="when">{{ p.acceptedDate || '' }}</span>
+        </div>
+        <div v-if="data.pending.length > 5" style="text-align:center;padding-top:8px">
+          <n-button size="small" quaternary @click="showAllPending = !showAllPending">{{ showAllPending ? '收起' : '显示更多（共 ' + data.pending.length + ' 条）' }}</n-button>
         </div>
       </div>
     </div>

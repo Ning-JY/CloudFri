@@ -431,6 +431,9 @@ namespace CloudFri.Api.Data.Migrations
                     b.Property<string>("ReportNo")
                         .HasColumnType("longtext");
 
+                    b.Property<decimal?>("ReviewSubmitAmount")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<string>("Scale")
                         .HasColumnType("longtext");
 

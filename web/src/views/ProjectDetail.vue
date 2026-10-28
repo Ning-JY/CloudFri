@@ -4,7 +4,7 @@ import { NButton, NTag } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
-import { fmt, fmtSize, avatarFor, cutRate, fileKind, todayStr, iconBtn, thUnit } from '../utils'
+import { fmt, fmtSize, avatarFor, cutRate, reviewCutRate, fileKind, todayStr, iconBtn, thUnit } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 import { useDicts } from '../stores/dicts'
@@ -54,6 +54,7 @@ onMounted(async () => {
 const p = computed(() => d.value?.project)
 const isAudit = computed(() => p.value && (p.value.bizType === '结算审核' || p.value.bizType === '竣工决算'))
 const isProcess = computed(() => p.value && (p.value.bizType === '跟踪审计' || p.value.bizType === '全过程咨询'))
+const isBudget = computed(() => p.value && p.value.bizType === '预算编制')
 const contractAmount = computed(() => {
   if (!d.value) return null
   const cs = d.value.contracts
@@ -90,6 +91,15 @@ const amounts = computed(() => {
     { lb: '咨询费应收', vl: fmt(p.value.fee) + ' 万', sb: '按合同约定', field: 'fee', num: p.value.fee },
     { lb: '已收咨询费', vl: fmt(received.value) + ' 万', sb: '累计收款', field: null }
   ]
+  if (isBudget.value) {
+    const rcr = reviewCutRate(p.value)
+    return [
+      { lb: '送审金额', vl: fmt(p.value.reviewSubmitAmount) + ' 万', sb: '委托方送审', field: 'reviewSubmitAmount', num: p.value.reviewSubmitAmount },
+      { lb: '预算金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '编制成果', field: 'submitAmount', num: p.value.submitAmount },
+      { lb: '审减额 / 审减率', vl: (p.value.reviewSubmitAmount != null && p.value.submitAmount != null) ? fmt(p.value.reviewSubmitAmount - p.value.submitAmount) + ' 万' : '—', sb: rcr != null ? '审减率 ' + rcr.toFixed(2) + '%' : '—', field: null },
+      { lb: '咨询费（应收 / 已收）', vl: fmt(p.value.fee) + ' 万', sb: '已收 ' + fmt(received.value) + ' 万', field: 'fee', num: p.value.fee }
+    ]
+  }
   return [
     { lb: p.value.bizType === '清单控制价' ? '控制价金额' : '预算金额', vl: fmt(p.value.submitAmount) + ' 万', sb: '编制成果', field: 'submitAmount', num: p.value.submitAmount },
     { lb: '合同金额', vl: contractAmount.value === '按实结算' ? '按实结算' : (contractAmount.value == null ? '—' : fmt(contractAmount.value) + ' 万'), sb: '关联合同合计', field: null },
@@ -107,6 +117,7 @@ function projectPayload(v, overrides = {}) {
     bizType: v.bizType, scale: v.scale, status: v.status, ownerMemberId: v.ownerMemberId,
     acceptedDate: v.acceptedDate, dueDate: v.dueDate, reportDate: v.reportDate, reportNo: v.reportNo,
     submitAmount: v.submitAmount, approvedAmount: v.approvedAmount, fee: v.fee || 0, description: v.description,
+    reviewSubmitAmount: v.reviewSubmitAmount ?? null,
     ...overrides
   }
 }
@@ -230,7 +241,7 @@ async function saveDocCat() {
     await load()
   } catch (e) { message.error(errMsg(e)) }
 }
-const openDocCat = ref('设计图纸')
+const openDocCat = ref('')
 const histOpen = ref({})
 function toggleHist(key) { histOpen.value = { ...histOpen.value, [key]: !histOpen.value[key] } }
 
@@ -703,6 +714,7 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
           <n-form-item-gi label="出报告日期"><n-date-picker v-model:formatted-value="ef.reportDate" value-format="yyyy-MM-dd" type="date" clearable style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="咨询费应收（万元）"><n-input-number v-model:value="ef.fee" :min="0" style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="送审 / 控制价 / 预算 / 建安（万元）"><n-input-number v-model:value="ef.submitAmount" :min="0" style="width:100%" /></n-form-item-gi>
+          <n-form-item-gi v-if="ef.bizType === '预算编制'" label="送审金额（万元，预算评审）"><n-input-number v-model:value="ef.reviewSubmitAmount" :min="0" style="width:100%" /></n-form-item-gi>
           <n-form-item-gi label="审定金额（万元，审核类）"><n-input-number v-model:value="ef.approvedAmount" :min="0" style="width:100%" /></n-form-item-gi>
         </n-grid>
         <n-form-item label="项目概况"><n-input v-model:value="ef.description" type="textarea" /></n-form-item>

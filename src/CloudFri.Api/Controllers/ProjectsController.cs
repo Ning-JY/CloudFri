@@ -18,7 +18,8 @@ public class ProjectsController : ControllerBase
         string Name, string Client, string? ContactName, string? ContactPhone,
         string BizType, string? Scale, string Status, int? OwnerMemberId,
         DateOnly? AcceptedDate, DateOnly? DueDate, DateOnly? ReportDate, string? ReportNo,
-        decimal? SubmitAmount, decimal? ApprovedAmount, decimal Fee, string? Description);
+        decimal? SubmitAmount, decimal? ApprovedAmount, decimal Fee, string? Description,
+        decimal? ReviewSubmitAmount = null);
 
     public record TeamItem(int MemberId, string Role, decimal Share, string? Duty = null);
 
@@ -119,7 +120,7 @@ public class ProjectsController : ControllerBase
             {
                 p.Id, p.Code, p.Name, p.Client, p.ContactName, p.ContactPhone, p.BizType, p.Scale,
                 p.Status, p.OwnerMemberId, OwnerName = ownerName, p.AcceptedDate, p.DueDate, p.ReportDate, p.ReportNo,
-                p.SubmitAmount, p.ApprovedAmount, p.Fee, p.Description, p.CreatedAt, p.UpdatedAt, p.CreatedBy
+                p.SubmitAmount, p.ApprovedAmount, p.ReviewSubmitAmount, p.Fee, p.Description, p.CreatedAt, p.UpdatedAt, p.CreatedBy
             },
             Team = teamOut,
             Contracts = contracts,
@@ -146,6 +147,7 @@ public class ProjectsController : ControllerBase
             BizType = req.BizType, Scale = req.Scale, Status = req.Status, OwnerMemberId = req.OwnerMemberId,
             AcceptedDate = req.AcceptedDate, DueDate = req.DueDate, ReportDate = req.ReportDate, ReportNo = req.ReportNo,
             SubmitAmount = req.SubmitAmount, ApprovedAmount = req.ApprovedAmount, Fee = req.Fee, Description = req.Description,
+            ReviewSubmitAmount = req.ReviewSubmitAmount,
             CreatedBy = User.DisplayName()
         };
         _db.Projects.Add(p);
@@ -168,6 +170,7 @@ public class ProjectsController : ControllerBase
         p.BizType = req.BizType; p.Scale = req.Scale; p.Status = req.Status; p.OwnerMemberId = req.OwnerMemberId;
         p.AcceptedDate = req.AcceptedDate; p.DueDate = req.DueDate; p.ReportDate = req.ReportDate; p.ReportNo = req.ReportNo;
         p.SubmitAmount = req.SubmitAmount; p.ApprovedAmount = req.ApprovedAmount; p.Fee = req.Fee;
+        p.ReviewSubmitAmount = req.ReviewSubmitAmount;
         p.Description = req.Description; p.UpdatedAt = DateTime.Now;
         await _db.SaveChangesAsync();
         return Ok(new { p.Id });

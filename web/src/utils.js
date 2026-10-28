@@ -74,6 +74,13 @@ export function cutRate(p) {
   return null
 }
 
+// 预算评审审减率：(送审金额 - 预算金额) / 送审金额 × 100；送审金额为 ReviewSubmitAmount、预算金额为 SubmitAmount。
+export function reviewCutRate(p) {
+  if (p.reviewSubmitAmount && p.submitAmount != null && p.reviewSubmitAmount > 0)
+    return (p.reviewSubmitAmount - p.submitAmount) / p.reviewSubmitAmount * 100
+  return null
+}
+
 // 预设头像库（randomuser 照片，按性别分组供成员表单挑选；选中后存 Member.AvatarPath）
 export const AVATAR_PRESETS = {
   M: Array.from({ length: 36 }, (_, i) => `https://randomuser.me/api/portraits/men/${i}.jpg`),
