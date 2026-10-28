@@ -98,7 +98,7 @@ async function saveUser() {
   } catch (e) { message.error(errMsg(e)) }
 }
 async function resetPwd(u) {
-  const pwd = 'cloudfri123'
+  const pwd = '123456'
   dialog.info({ title: '重置密码', content: `将 ${u.userName} 的密码重置为 ${pwd}（请提醒其登录后立即修改）？`, positiveText: '重置', negativeText: '取消',
     onPositiveClick: async () => { await api.post(`/users/${u.id}/reset-password`, { password: pwd }); message.success('已重置') } })
 }
