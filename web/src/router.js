@@ -27,8 +27,9 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('cloudfri_token')
-  if (!to.meta.public && !token) return { name: 'login' }
-  if (to.name === 'login' && token) return { name: 'home' }
+  const guest = sessionStorage.getItem('cloudfri_guest') === '1'
+  if (!to.meta.public && !token && !guest) return { name: 'login' }
+  if (to.name === 'login' && (token || guest)) return { name: 'home' }
   // 基础设置仅管理员：普通成员输网址也进不去
   if (to.meta.adminOnly) {
     let role = null

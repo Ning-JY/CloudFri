@@ -11,6 +11,12 @@ const message = useMessage()
 const form = ref({ userName: '', password: '' })
 const loading = ref(false)
 
+function enterGuest() {
+  auth.enterGuest()
+  message.success('已进入访客模式：可自由体验，添加的数据不会保存')
+  router.push('/')
+}
+
 async function submit() {
   if (!form.value.userName || !form.value.password) { message.warning('请输入用户名和密码'); return }
   loading.value = true
@@ -44,6 +50,12 @@ async function submit() {
         </NFormItem>
         <NButton type="primary" size="large" block :loading="loading" @click="submit" style="margin-top:6px">登 录</NButton>
       </NForm>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0 12px">
+        <span style="flex:1;height:1px;background:var(--line)"></span>
+        <span class="faint" style="font-size:12px">或</span>
+        <span style="flex:1;height:1px;background:var(--line)"></span>
+      </div>
+      <NButton size="large" block @click="enterGuest">访客模式进入（免登录 · 数据不保存）</NButton>
       <p class="faint" style="text-align:center;font-size:12px;margin:20px 0 0">造价管理系统 v1.2 · 宜宾规划设计咨询集团有限公司</p>
     </div>
   </div>

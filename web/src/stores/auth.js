@@ -1,12 +1,15 @@
 import { defineStore } from 'pinia'
-import api from '../api'
+import api, { applyGuestAdapter } from '../api'
 import { avatarFor } from '../utils'
+import { GUEST_KEY, isGuest, resetGuestDb } from '../guest'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem('cloudfri_token') || '',
-    user: JSON.parse(localStorage.getItem('cloudfri_user') || 'null'),
-    profile: null // 个人中心详情（GET /auth/profile）：含关联成员信息，左下角头像与个人中心共用
+    user: JSON.parse(localStorage.getItem('cloudfri_user') || 'null')
+      || (isGuest() ? { id: 0, userName: 'guest', displayName: '访客', role: 'Member' } : null),
+    profile: null, // 个人中心详情（GET /auth/profile）：含关联成员信息，左下角头像与个人中心共用
+    guest: isGuest() // 访客模式（免登录演示）：数据只存浏览器内存，不落库
   }),
   getters: {
     isAdmin: (s) => s.user?.role === 'Admin',
@@ -42,7 +45,26 @@ export const useAuthStore = defineStore('auth', {
         localStorage.setItem('cloudfri_user', JSON.stringify(this.user))
       }
     },
+    // 进入访客模式：不登录、不加载真实数据，操作只存内存（guest.js 拦截全部接口）
+    enterGuest() {
+      sessionStorage.setItem(GUEST_KEY, '1')
+      resetGuestDb()
+      this.guest = true
+      this.token = ''
+      this.user = { id: 0, userName: 'guest', displayName: '访客', role: 'Member' }
+      this.profile = null
+      applyGuestAdapter()
+    },
+    exitGuest() {
+      sessionStorage.removeItem(GUEST_KEY)
+      this.guest = false
+      this.user = null
+      this.profile = null
+      resetGuestDb()
+      applyGuestAdapter()
+    },
     logout() {
+      if (this.guest) { this.exitGuest(); return }
       this.token = ''
       this.user = null
       this.profile = null

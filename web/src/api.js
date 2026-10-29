@@ -1,6 +1,14 @@
 import axios from 'axios'
+import { isGuest, guestAdapter } from './guest'
 
 const api = axios.create({ baseURL: '/api', timeout: 30000 })
+
+// 访客模式：全部请求走浏览器内模拟层（guest.js），不发网络请求、不碰真实数据
+const defaultAdapter = api.defaults.adapter
+export function applyGuestAdapter() {
+  api.defaults.adapter = isGuest() ? guestAdapter : defaultAdapter
+}
+applyGuestAdapter()
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('cloudfri_token')
