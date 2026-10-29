@@ -123,7 +123,7 @@ defineExpose({ open })
   <n-modal v-model:show="show" preset="card" :title="title" style="width:920px;max-width:94vw;border-radius:16px">
     <div v-if="loading" style="text-align:center;padding:30px"><n-spin size="medium" /><div class="small mut" style="margin-top:8px">正在生成预览…</div></div>
     <template v-else-if="!failed">
-      <div v-if="kind === 'pdf'" class="office-wrap"><VueOfficePdf :src="buf" @error="onRenderError" /></div>
+      <div v-if="kind === 'pdf'" class="office-wrap pdf-wrap"><VueOfficePdf :src="buf" @error="onRenderError" /></div>
       <div v-else-if="kind === 'docx'" class="office-wrap"><VueOfficeDocx :src="buf" @error="onRenderError" /></div>
       <div v-else-if="kind === 'sheet'" class="office-wrap"><VueOfficeExcel :src="buf" :options="{ xls: true }" @error="onRenderError" /></div>
       <div v-else-if="kind === 'pptx'" class="office-wrap"><VueOfficePptx :src="buf" @error="onRenderError" /></div>
@@ -168,6 +168,10 @@ defineExpose({ open })
 
 <style scoped>
 .office-wrap { height: 68vh; overflow: auto; background: #f4f6f5; border-radius: 8px; }
+/* PDF 专用：@vue-office/pdf 是窗口化懒渲染，靠它自身容器的 scroll 推进渲染窗口；
+   外层不能代替它滚动（否则 scrollTop 恒为 0、只渲染开头几页），故把 68vh 高度交给组件根元素自己滚。 */
+.pdf-wrap { overflow: hidden; }
+.pdf-wrap :deep(.vue-office-pdf) { height: 68vh; border-radius: 8px; }
 .doc-preview { max-height: 66vh; overflow: auto; padding: 14px 16px; background: #fff; border: 1px solid var(--line-soft); border-radius: 8px; font-size: 13px; line-height: 1.6; color: #26312b; }
 .doc-preview table { border-collapse: collapse; margin: 6px 0; width: 100%; }
 .doc-preview td, .doc-preview th { border-bottom: 1px solid #e3e8e4; padding: 4px 8px; }
