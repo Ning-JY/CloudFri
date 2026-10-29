@@ -5,6 +5,7 @@ import { NTag, useMessage } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, statusType, todayStr, iconBtn, thUnit, nameCell } from '../utils'
 import TableTools from '../components/TableTools.vue'
+import ReceiptEditModal from '../components/ReceiptEditModal.vue'
 import Pager from '../components/Pager.vue'
 import { usePager } from '../composables/usePager'
 
@@ -62,6 +63,10 @@ async function confirmReceipt(r) {
   } catch (e) { message.error(errMsg(e)) }
 }
 const recStatusText = (r) => r.isReceived ? '已收款 · ' + (r.receivedDate || '') : '已开票 · 待收款'
+// 编辑开票（与项目详情共用 ReceiptEditModal 组件）
+const showRecEdit = ref(false)
+const editRow = ref(null)
+function openRecEdit(r) { editRow.value = r; showRecEdit.value = true }
 const REC_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
   { title: '发票号', key: 'invoiceNo', width: 120, ellipsis: { tooltip: true }, render: (r) => r.invoiceNo || h('span', { class: 'faint' }, '—') },
@@ -72,7 +77,10 @@ const REC_COLUMNS = [
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => recStatusText(r))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => recStatusText(r)) },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
-  { title: '', key: 'act', width: 46, exportValue: () => '', render: (r) => r.isReceived ? null : iconBtn('check', 'green', '确认收款（今天到账）', () => confirmReceipt(r)) }
+  { title: '', key: 'act', width: 76, exportValue: () => '', render: (r) => h('div', { style: 'display:flex' }, [
+      iconBtn('pencil', 'green', '编辑', () => openRecEdit(r)),
+      r.isReceived ? null : iconBtn('check', 'blue', '确认收款（今天到账）', () => confirmReceipt(r))
+    ]) }
 ]
 const recVisibleKeys = ref(REC_COLUMNS.map(c => c.key))
 const recColumns = computed(() => REC_COLUMNS.filter(c => recVisibleKeys.value.includes(c.key)))
@@ -199,5 +207,8 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
         </div>
       </template>
     </n-modal>
+
+    <ReceiptEditModal v-model:show="showRecEdit" :receipt="editRow"
+      :project-label="editRow ? editRow.projectCode + ' · ' + editRow.projectName : ''" @saved="load" />
   </div>
 </template>

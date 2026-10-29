@@ -6,6 +6,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import api, { errMsg } from '../api'
 import { fmt, fmtSize, avatarFor, cutRate, reviewCutRate, fileKind, todayStr, iconBtn, thUnit } from '../utils'
 import PreviewModal from '../components/PreviewModal.vue'
+import ReceiptEditModal from '../components/ReceiptEditModal.vue'
 import GcfxPanel from '../components/GcfxPanel.vue'
 import { useDicts } from '../stores/dicts'
 import TableTools from '../components/TableTools.vue'
@@ -435,6 +436,10 @@ async function delReceipt(rid) {
   message.success('已删除')
   await load()
 }
+// 编辑开票（与收费台账共用 ReceiptEditModal 组件）
+const showRecEdit = ref(false)
+const editRecRow = ref(null)
+function openRecEdit(r) { editRecRow.value = r; showRecEdit.value = true }
 
 const RECEIPT_COLUMNS = [
   { title: '开票日期', key: 'date', width: 102 },
@@ -445,7 +450,8 @@ const RECEIPT_COLUMNS = [
       ? h(NTag, { size: 'small', type: 'success', bordered: false }, () => '已收款 · ' + (r.receivedDate || ''))
       : h(NTag, { size: 'small', type: 'warning', bordered: false }, () => '已开票 · 待收款') },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
-  { title: '', key: 'act', width: 78, exportValue: () => '', render: (r) => h('span', { style: 'display:inline-flex;gap:2px' }, [
+  { title: '', key: 'act', width: 106, exportValue: () => '', render: (r) => h('span', { style: 'display:inline-flex;gap:2px' }, [
+      iconBtn('pencil', 'blue', '编辑', () => openRecEdit(r)),
       r.isReceived ? null : iconBtn('check', 'green', '确认收款', () => openConfirm(r)),
       iconBtn('trash', 'red', '删除', () => delReceipt(r.id))
     ]) }
@@ -789,6 +795,9 @@ const pagedReceipts = computed(() => d.value ? pagerRec.slice(d.value.receipts) 
         </div>
       </template>
     </n-modal>
+
+    <!-- 编辑开票（共用组件） -->
+    <ReceiptEditModal v-model:show="showRecEdit" :receipt="editRecRow" :project-id="id" @saved="load" />
 
     <!-- 确认收款 -->
     <n-modal v-model:show="showConfirm" preset="card" title="确认收款" style="width:400px;border-radius:16px">

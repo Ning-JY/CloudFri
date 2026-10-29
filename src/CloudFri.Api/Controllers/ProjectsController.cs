@@ -242,6 +242,31 @@ public class ReceiptsController : ControllerBase
         return Ok(new { r.Id });
     }
 
+    public record ReceiptEditReq(DateOnly Date, decimal Amount, string? Method, string? Handler, string? Note, int? ContractId = null, string? InvoiceNo = null, bool IsReceived = false, DateOnly? ReceivedDate = null);
+
+    /// <summary>编辑开票记录：改开票日期/金额/发票号/所属合同/方式/经办人/备注，以及收款状态与到账日期（收费台账与项目详情共用）。</summary>
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int projectId, int id, ReceiptEditReq req)
+    {
+        var r = await _db.Receipts.FirstOrDefaultAsync(x => x.Id == id && x.ProjectId == projectId);
+        if (r == null) return NotFound();
+        if (req.ContractId is int cid && !await _db.Contracts.AnyAsync(x => x.Id == cid))
+            return BadRequest(new { message = "所选合同不存在" });
+        r.Date = req.Date;
+        r.Amount = req.Amount;
+        r.Method = req.Method;
+        r.Handler = req.Handler;
+        r.Note = req.Note;
+        r.ContractId = req.ContractId;
+        r.InvoiceNo = req.InvoiceNo;
+        r.IsReceived = req.IsReceived;
+        r.ReceivedDate = req.IsReceived
+            ? (req.ReceivedDate ?? r.ReceivedDate ?? DateOnly.FromDateTime(DateTime.Now))
+            : null;
+        await _db.SaveChangesAsync();
+        return Ok(new { r.Id });
+    }
+
     public record ConfirmReq(DateOnly? ReceivedDate);
 
     /// <summary>确认收款：把一张已开票记录置为已到账（仿 EnterpriseMS 的 Received 动作）。</summary>
