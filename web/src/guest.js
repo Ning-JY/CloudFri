@@ -203,6 +203,8 @@ export function guestAdapter(config) {
     return J({ id: 0, userName: 'guest', displayName: db.displayName, role: 'Member', memberId: null, createdAt: nowIso(), lastLoginAt: nowIso(), lastLoginIp: '—', member: null })
   }
   if (path === '/auth/change-password') return fail(config, 400, '访客模式下不能修改密码')
+  if (path === '/reportgen/templates' && method === 'get') return J([{ id: 'cost-audit', name: '造价审核报告', category: '造价' }])
+  if (path === '/reportgen/generate') return fail(config, 400, '访客模式下不支持导出 Word（报告渲染在服务器进行）；导入、映射与预览可正常使用')
   if (path === '/auth/login') return fail(config, 400, '当前为访客模式，请先退出访客模式再登录')
 
   // ===== 字典 / 成员 / 账号（设置页访客进不去，这里兜底保证不报错） =====

@@ -27,7 +27,8 @@ const NAV = [
   ] },
   { group: '办公', items: [
     { name: 'forms', label: '流程模板', path: '/forms', icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>' },
-    { name: 'library', label: '资料库', path: '/library', icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>' }
+    { name: 'library', label: '资料库', path: '/library', icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>' },
+    { name: 'report-gen', label: '报告生成', path: '/report-gen', icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 17v-4M12 17V9M15 17v-6"/>' }
   ] },
   { group: '分析', items: [
     { name: 'stats', label: '统计分析', path: '/stats', icon: '<path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/>' },
