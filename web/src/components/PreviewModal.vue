@@ -16,6 +16,15 @@ const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx'))
 const show = ref(false)
 const title = ref('')
 const kind = ref('other')
+// PDF 缩放：调 @vue-office/pdf 自带的 setScale（内部按新比例整册重渲染）；每次打开新文件重置为 100% 并换 key 重挂载
+const pdfRef = ref(null)
+const pdfScale = ref(1)
+const pdfKey = ref(0)
+function zoomPdf(d) {
+  const v = Math.min(3, Math.max(0.5, Math.round((pdfScale.value + d) * 100) / 100))
+  pdfScale.value = v
+  pdfRef.value?.setScale?.(v)
+}
 const url = ref('')
 const buf = shallowRef(null)
 const mdHtml = ref('')
@@ -42,6 +51,8 @@ function reset() {
 async function open(downloadUrl, name) {
   title.value = name || ''
   kind.value = fileKind(name)
+  pdfScale.value = 1
+  pdfKey.value++
   reset()
   show.value = true
   loading.value = true
@@ -123,7 +134,14 @@ defineExpose({ open })
   <n-modal v-model:show="show" preset="card" :title="title" style="width:920px;max-width:94vw;border-radius:16px">
     <div v-if="loading" style="text-align:center;padding:30px"><n-spin size="medium" /><div class="small mut" style="margin-top:8px">正在生成预览…</div></div>
     <template v-else-if="!failed">
-      <div v-if="kind === 'pdf'" class="office-wrap pdf-wrap"><VueOfficePdf :src="buf" @error="onRenderError" /></div>
+      <div v-if="kind === 'pdf'">
+        <div class="pdf-tools">
+          <n-button size="small" :disabled="pdfScale <= 0.5" @click="zoomPdf(-0.25)" title="缩小">−</n-button>
+          <span class="num small" style="min-width:46px;text-align:center">{{ Math.round(pdfScale * 100) }}%</span>
+          <n-button size="small" :disabled="pdfScale >= 3" @click="zoomPdf(0.25)" title="放大">+</n-button>
+        </div>
+        <div class="office-wrap pdf-wrap"><VueOfficePdf ref="pdfRef" :key="pdfKey" :src="buf" @error="onRenderError" /></div>
+      </div>
       <div v-else-if="kind === 'docx'" class="office-wrap"><VueOfficeDocx :src="buf" @error="onRenderError" /></div>
       <div v-else-if="kind === 'sheet'" class="office-wrap"><VueOfficeExcel :src="buf" :options="{ xls: true }" @error="onRenderError" /></div>
       <div v-else-if="kind === 'pptx'" class="office-wrap"><VueOfficePptx :src="buf" @error="onRenderError" /></div>
@@ -171,7 +189,8 @@ defineExpose({ open })
 /* PDF 专用：@vue-office/pdf 是窗口化懒渲染，靠它自身容器的 scroll 推进渲染窗口；
    外层不能代替它滚动（否则 scrollTop 恒为 0、只渲染开头几页），故把 68vh 高度交给组件根元素自己滚。 */
 .pdf-wrap { overflow: hidden; }
-.pdf-wrap :deep(.vue-office-pdf) { height: 68vh; border-radius: 8px; }
+.pdf-wrap :deep(.vue-office-pdf) { height: 64vh; border-radius: 8px; }
+.pdf-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 8px; }
 .doc-preview { max-height: 66vh; overflow: auto; padding: 14px 16px; background: #fff; border: 1px solid var(--line-soft); border-radius: 8px; font-size: 13px; line-height: 1.6; color: #26312b; }
 .doc-preview table { border-collapse: collapse; margin: 6px 0; width: 100%; }
 .doc-preview td, .doc-preview th { border-bottom: 1px solid #e3e8e4; padding: 4px 8px; }
