@@ -41,14 +41,15 @@ async function loadCounts() {
 function countOf(c) { return c ? allRows.value.filter(r => r.category === c).length : allRows.value.length }
 onMounted(async () => { await loadCounts(); load() })
 
-// 上传（带进度，走全站共用 UploadBtn）：分类与显示名称先在弹窗里选好，点按钮选文件即上传
+// 上传（带进度，走全站共用 UploadBtn）：分类先在弹窗里选好，点按钮选文件即上传，可多选批量上传；
+// 显示名称只在单个文件时生效（批量时各文件用自己的文件名，避免同名）
 const showUpload = ref(false)
 const upCat = ref('规章制度')
 const upName = ref('')
-async function doUpload(file, onProgress) {
+async function doUpload(file, onProgress, meta) {
   const fd = new FormData()
   fd.append('category', upCat.value)
-  if (upName.value) fd.append('name', upName.value)
+  if (upName.value && (!meta || meta.total <= 1)) fd.append('name', upName.value)
   fd.append('file', file)
   await api.post('/library', fd, { onUploadProgress: (e) => { if (e.total) onProgress(Math.round(e.loaded / e.total * 100)) } })
 }
@@ -143,12 +144,13 @@ const columns = computed(() => ALL_COLUMNS.filter(c => visibleKeys.value.include
     <n-modal v-model:show="showUpload" preset="card" title="上传资料" style="width:480px;border-radius:16px">
       <n-form label-placement="top">
         <n-form-item label="分类"><n-select v-model:value="upCat" :options="CATS.map(c => ({ label: c, value: c }))" /></n-form-item>
-        <n-form-item label="显示名称（可空，默认取文件名）"><n-input v-model:value="upName" /></n-form-item>
+        <n-form-item label="显示名称（可空，默认取文件名；仅单个文件时生效）"><n-input v-model:value="upName" /></n-form-item>
       </n-form>
+      <p class="small faint" style="margin:0">可一次多选多个文件批量上传，同一批共用上面选的分类；批量时显示名称不生效，各文件用自己的文件名。</p>
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:10px;align-items:center">
           <n-button @click="showUpload = false">取消</n-button>
-          <UploadBtn label="选择文件并上传" type="primary" :upload="doUpload" @done="onUploaded" />
+          <UploadBtn label="选择文件并上传（可多选）" type="primary" multiple :upload="doUpload" @done="onUploaded" />
         </div>
       </template>
     </n-modal>

@@ -3,8 +3,9 @@ import { ref } from 'vue'
 import { useMessage } from 'naive-ui'
 
 // 全站共用的上传按钮（各处上传入口统一用它，不要各页各写一套）：
-// 点按钮选文件（可多选）→ 逐个调父页给的 upload(file, onProgress) 上传（父页在自己的 api.post 里接
-// onUploadProgress: onProgress）→ 按钮旁显示进度条与百分比，全部完成 emit('done', results)，父页刷新列表。
+// 点按钮选文件（可多选）→ 逐个调父页给的 upload(file, onProgress, meta) 上传（父页在自己的 api.post 里接
+// onUploadProgress: onProgress；meta={index,total} 供批量场景区分单/多文件）→ 按钮旁显示进度条与百分比，
+// 全部完成 emit('done', results)，父页刷新列表。
 // silent=true 时不弹自带的成功提示（父页要按上传结果给专门提示时用，如 GCFX 回填提示）。
 const props = defineProps({
   upload: { type: Function, required: true },
@@ -31,10 +32,11 @@ async function onChange(e) {
   busy.value = true
   const results = []
   try {
-    for (const f of files) {
-      curName.value = f.name
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      curName.value = files.length > 1 ? `${f.name}（${i + 1}/${files.length}）` : f.name
       pct.value = 0
-      results.push(await props.upload(f, (p) => { pct.value = p }))
+      results.push(await props.upload(f, (p) => { pct.value = p }, { index: i, total: files.length }))
     }
     if (results.length && !props.silent) message.success(files.length > 1 ? `已上传 ${results.length} 个文件` : '上传成功')
     if (results.length) emit('done', results)
